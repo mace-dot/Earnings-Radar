@@ -68,5 +68,16 @@ def validate_quote(row, *, now=None):
     out['feed_type'] = text(row.get('feed_type'), 'historical')
     if out['feed_type'] not in {'live', 'delayed', 'indicative', 'historical', 'sample'}:
         raise ValueError('invalid feed type')
+    adjusted=number(row.get('adjusted',0),integer=True)
+    if adjusted not in (0,1):raise ValueError('adjusted must be 0 or 1')
+    out['adjusted']=adjusted
+    for kind,letter in (('call','C'),('put','P')):
+        identity=text(row.get(kind+'_contract_id'))
+        if identity:
+            match=re.fullmatch(r'([A-Z]{1,6})([0-9]{6})([CP])([0-9]{8})',identity)
+            expected=date.fromisoformat(out['expiration']).strftime('%y%m%d')
+            if not match or match[1]!=out['ticker'].replace('.','') or match[2]!=expected or match[3]!=letter or int(match[4])/1000!=out['strike']:
+                raise ValueError('contract identity does not match ticker/type/strike/expiration')
+        out[kind+'_contract_id']=identity or None
     out['source'] = text(row.get('source'))
     return out

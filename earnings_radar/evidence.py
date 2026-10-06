@@ -11,6 +11,7 @@ def classify(evidence):
             if word in title: status=label;break
         if evidence['provenance']!='primary' and status=='reported_signed_action':status='unknown'
         return 'political',status
+    if evidence['provider']=='sec_fundamentals':return 'earnings','not_applicable'
     if any(w in title for w in ('earnings','10-q','10-k','guidance','8-k')):return 'earnings','not_applicable'
     if evidence['provider'].startswith('fed_') or any(w in title for w in ('credit','funding','volatility','banking')):return 'systemic','not_applicable'
     return 'general','not_applicable'

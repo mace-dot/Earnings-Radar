@@ -39,7 +39,7 @@ def test_budget_and_model_failure_fallback(tmp_path,monkeypatch):
         def analyze(self,*args):raise TimeoutError()
     assert process_pending(p,settings,model=Broken())==1
     with get_conn(p) as c:
-        assert c.execute('SELECT model_version FROM analyses').fetchone()[0]=='deterministic-v1'
+        assert c.execute('SELECT model_version FROM analyses').fetchone()[0]=='deterministic-v2'
         assert 'failed:TimeoutError' in c.execute('SELECT config FROM analyses').fetchone()[0]
         assert not reserve(c,.1)
         assert c.execute('SELECT COUNT(*) FROM alerts').fetchone()[0]==1

@@ -50,10 +50,16 @@ def rejection_reasons(quote, event, *, now=None, live=False):
     if any(q.get(k) is None for k in ('stock_price','call_bid','call_ask','put_bid','put_ask','quote_timestamp')):
         reasons.append('missing_fields')
     if live:
+        if boundary <= now:
+            reasons.append('event_already_occurred')
         if event.get('earnings_time') == 'Unknown':
             reasons.append('unknown_announcement_time')
+        if not event.get('source'):
+            reasons.append('missing_earnings_source')
         if event.get('confirmation_status') != 'Confirmed':
             reasons.append('unconfirmed_schedule')
+        if q.get('quote_timestamp') and (now-datetime.fromisoformat(q['quote_timestamp'])).total_seconds()>LIVE_MAX_AGE:
+            reasons.append('stale_snapshot')
         if q['feed_type'] != 'live':
             reasons.append('feed_not_live')
         keys = ('underlying_timestamp','call_timestamp','put_timestamp')
@@ -78,7 +84,8 @@ def select_quote(event, quotes, *, now=None, live=False):
         if q.get('ticker') != event.get('ticker'):
             continue
         try:
-            ts = datetime.fromisoformat(validate_quote(q, now=now)['quote_timestamp'])
+            q = validate_quote(q, now=now)
+            ts = datetime.fromisoformat(q['quote_timestamp'])
         except (TypeError, ValueError):
             continue
         if ts > now:

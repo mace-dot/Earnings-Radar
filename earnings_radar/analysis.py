@@ -9,12 +9,22 @@ from earnings_radar.model import AnthropicModel,reserve
 
 def factual_analysis(evidence):
     category,policy=classify(evidence)
+    metadata=json.loads(evidence["metadata"])
+    mechanism="Not established from source metadata alone; inspect the linked primary document."
+    horizon="Unspecified pending document review"
+    bullish=[];bearish=[]
+    if evidence["provider"]=="sec_fundamentals":
+        tag=metadata["tag"]
+        horizon="Historical reported period ending "+metadata["end"]
+        mechanism={"RevenueFromContractWithCustomerExcludingAssessedTax":"Reported revenue measures operating scale. Costs, margins and expectations are needed to assess valuation implications.","NetIncomeLoss":"Reported net income/loss measures historical profitability; cash conversion, financing and expectations still need review.","GrossProfit":"Reported gross profit links revenue and direct costs; operating expenses and period comparability still need review."}[tag]
+        bullish=["Improving comparable results could support the thesis; do not infer growth or an earnings beat from an isolated value."]
+        bearish=["Historical results may already be priced in; weak cash conversion, lower guidance or high expectations could offset them."]
     return validate_analysis({
         'event_id':evidence['id'],'affected_tickers':json.loads(evidence['tickers']),
         'confirmed_facts':[{'evidence_id':evidence['id'],'field':'title','excerpt':evidence['title']}],
-        'hypotheses':[], 'economic_mechanism':'Not established from source metadata alone; inspect the linked primary document.',
-        'bullish_implications':[],'bearish_implications':[],'counterevidence':[],
-        'time_horizon':'Unspecified pending document review','observed_reaction':'Unknown: no synchronized market reaction verified',
+        'hypotheses':[], 'economic_mechanism':mechanism,
+        'bullish_implications':bullish,'bearish_implications':bearish,'counterevidence':[],
+        'time_horizon':horizon,'observed_reaction':'Unknown: no synchronized market reaction verified',
         'suggested_action':'investigate','invalidation_conditions':['Source correction or conflicting primary evidence'],
         'missing_information':['Full-document review','Expectations or consensus','Fresh synchronized option and underlying quotes','Contradictory evidence','Documented company exposures'],
         'evidence_confidence':'medium' if evidence['provenance']=='primary' else 'low',
@@ -26,7 +36,7 @@ def process_pending(path,settings,limit=25,model=None):
     with get_conn(path) as conn:
         rows=[dict(r) for r in conn.execute('SELECT e.* FROM evidence e WHERE NOT EXISTS (SELECT 1 FROM analyses a WHERE a.evidence_id=e.id) ORDER BY e.id LIMIT ?',(limit,))]
     for evidence in rows:
-        result=factual_analysis(evidence);version='deterministic-v1';model_status='disabled'
+        result=factual_analysis(evidence);version='deterministic-v2';model_status='disabled'
         if settings.model_enabled and os.getenv('ANTHROPIC_API_KEY'):
             with get_conn(path) as conn:
                 allowed=reserve(conn,settings.model_daily_budget)

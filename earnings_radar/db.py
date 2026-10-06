@@ -129,37 +129,51 @@ def init_db(db_path: Optional[Path] = None) -> Path:
 
 def insert_earnings_event(conn: sqlite3.Connection, row: dict[str, Any]) -> int:
     from earnings_radar.validation import ticker, iso_date, text
+    from earnings_radar.config import EARNINGS_TIMES, CONFIRMATION_STATUSES
     ticker_value = ticker(row['ticker'])
     day = iso_date(row['earnings_date'])
     now = utc_now()
-    provider = row.get('provider', 'csv')
-    identity = row.get('provider_event_id')
-    period = row.get('fiscal_period')
+    provider = text(row.get('provider'),'csv')
+    identity = text(row.get('provider_event_id')) or None
+    period = text(row.get('fiscal_period')) or None
+    priority = {'ir':100,'exchange':90,'licensed_calendar':70}.get(provider,10)
+    timing = text(row.get('earnings_time'),'Unknown')
+    status = text(row.get('confirmation_status'),'Unconfirmed')
+    if timing not in EARNINGS_TIMES or status not in CONFIRMATION_STATUSES:
+        raise ValueError('invalid schedule timing or confirmation status')
+    existing = None
     if identity:
-        existing = conn.execute("SELECT * FROM earnings_events WHERE provider=? AND provider_event_id=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (provider,identity)).fetchone()
-    elif period:
+        existing = conn.execute("SELECT * FROM earnings_events WHERE provider=? AND provider_event_id=? ORDER BY id DESC LIMIT 1", (provider,identity)).fetchone()
+        if not existing:
+            alias = conn.execute('SELECT event_id FROM earnings_source_evidence WHERE provider=? AND provider_event_id=? ORDER BY id DESC LIMIT 1',(provider,identity)).fetchone()
+            if alias: existing=conn.execute('SELECT * FROM earnings_events WHERE id=?',(alias['event_id'],)).fetchone()
+        while existing and existing['superseded_by']:
+            existing=conn.execute('SELECT * FROM earnings_events WHERE id=?',(existing['superseded_by'],)).fetchone()
+    if not existing and period:
         existing = conn.execute("SELECT * FROM earnings_events WHERE ticker=? AND fiscal_period=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (ticker_value,period)).fetchone()
-    else:
+    if not existing:
         existing = conn.execute("SELECT * FROM earnings_events WHERE ticker=? AND earnings_date=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (ticker_value,day)).fetchone()
-    values = (ticker_value, day, text(row.get('earnings_time'),'Unknown'), text(row.get('confirmation_status'),'Unconfirmed'), text(row.get('source')), now, now, provider, identity, period, row.get('feed_type','historical'))
-    if existing and all(existing[k] == values[i] for i,k in enumerate(['ticker','earnings_date','earnings_time','confirmation_status','source'])):
-        return existing['id']
-    # Never discard conflicting source evidence. CSV identities without a fiscal period
-    # can only reconcile same-day schedule changes; cross-date matching is not guessed.
+    values = (ticker_value, day, timing, status, text(row.get('source')), now, now, provider, identity, period, row.get('feed_type','historical'),priority)
     if existing:
+        # Every conflicting source stays inspectable; weak sources cannot replace stronger schedules.
+        conn.execute('INSERT INTO earnings_source_evidence(event_id,provider,provider_event_id,observed_at,payload) VALUES (?,?,?,?,?)', (existing['id'],provider,identity,now,json.dumps(row)))
+        same = all(existing[k] == values[i] for i,k in enumerate(['ticker','earnings_date','earnings_time','confirmation_status','source']))
+        if same or priority < existing['source_priority']:
+            return existing['id']
         conn.execute('INSERT INTO earnings_revisions(event_id,recorded_at,payload) VALUES (?,?,?)', (existing['id'],now,json.dumps(dict(existing))))
         exact = conn.execute('SELECT id FROM earnings_events WHERE ticker=? AND earnings_date=? AND earnings_time=?', values[:3]).fetchone()
-        if exact and exact['id'] == existing['id']:
-            conn.execute('UPDATE earnings_events SET confirmation_status=?,source=?,updated_at=?,revision=revision+1 WHERE id=?', (values[3],values[4],now,existing['id']))
-            return existing['id']
+        revision=existing['revision']+1
         if exact:
             new_id = exact['id']
-            conn.execute('UPDATE earnings_events SET superseded_by=NULL WHERE id=?', (new_id,))
+            conn.execute('UPDATE earnings_events SET confirmation_status=?,source=?,updated_at=?,provider=?,provider_event_id=?,fiscal_period=?,feed_type=?,source_priority=?,revision=?,superseded_by=NULL WHERE id=?',(status,values[4],now,provider,identity,period,values[10],priority,revision,new_id))
         else:
-            new_id = conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (*values,existing['revision']+1)).lastrowid
-        conn.execute('UPDATE earnings_events SET superseded_by=? WHERE id=?', (new_id,existing['id']))
+            new_id = conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type,source_priority,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (*values,revision)).lastrowid
+        if new_id != existing['id']:
+            conn.execute('UPDATE earnings_events SET superseded_by=? WHERE id=?', (new_id,existing['id']))
         return int(new_id)
-    return int(conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type) VALUES (?,?,?,?,?,?,?,?,?,?,?)", values).lastrowid)
+    event_id=int(conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type,source_priority) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", values).lastrowid)
+    conn.execute('INSERT INTO earnings_source_evidence(event_id,provider,provider_event_id,observed_at,payload) VALUES (?,?,?,?,?)',(event_id,provider,identity,now,json.dumps(row)))
+    return event_id
 
 
 def insert_option_quote(conn: sqlite3.Connection, row: dict[str, Any]) -> int:

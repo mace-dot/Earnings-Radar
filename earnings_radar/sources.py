@@ -6,6 +6,7 @@ from earnings_radar.db import init_db
 
 SOURCES = [
 ('sec','SEC','primary','https://www.sec.gov/search-filings/edgar-application-programming-interfaces','configured_contact_required','SEC submissions metadata; not future earnings dates'),
+('sec_fundamentals','SEC XBRL fundamentals','primary','https://www.sec.gov/search-filings/edgar-application-programming-interfaces','configured_contact_required','Historical reported revenue, net income and gross profit; no consensus or upcoming earnings forecast'),
 ('fed_press','Federal Reserve','primary','https://www.federalreserve.gov/feeds/feeds.htm','public','Official press releases and policy documents'),
 ('fed_speeches','Federal Reserve speeches','institutional_research','https://www.federalreserve.gov/feeds/feeds.htm','public','Attributed opinion; not automatically enacted policy'),
 ('alpaca_news','Alpaca news','news','https://docs.alpaca.markets/reference/news-3','credentials_required','Entitled news metadata; source attribution retained'),
@@ -27,5 +28,5 @@ def prepare(path=None):
     from earnings_radar.db import get_conn
     with get_conn(path) as conn:
         for source in SOURCES:
-            conn.execute('INSERT OR IGNORE INTO source_registry(id,name,category,documentation_url,access_status,capabilities) VALUES (?,?,?,?,?,?)',source)
+            conn.execute('INSERT INTO source_registry(id,name,category,documentation_url,access_status,capabilities) VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET documentation_url=excluded.documentation_url,access_status=excluded.access_status,capabilities=excluded.capabilities',source)
     return path

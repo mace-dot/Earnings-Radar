@@ -61,7 +61,7 @@ def test_connection_failures_visible_and_restart(tmp_path,monkeypatch):
         assert any(j['last_error']=='feed unavailable' for j in snapshot(c)['jobs'])
     again=Worker(p,Settings())
     assert again.owner!=w.owner
-    with get_conn(p) as c: assert c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]==7
+    with get_conn(p) as c: assert c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0]==10
 
 def test_sec_requires_identification_and_valid_cik():
     with pytest.raises(ProviderError): SEC('Earnings Radar')
@@ -70,3 +70,30 @@ def test_sec_requires_identification_and_valid_cik():
 def test_request_disallows_retrieved_destinations():
     with pytest.raises(ProviderError): HTTP().request('GET','https://evil.example/api')
     with pytest.raises(ProviderError): HTTP().request('GET','http://data.sec.gov/submissions/x')
+
+def test_sec_fundamentals_preserve_periods_and_precision():
+    from earnings_radar.providers.sec_fundamentals import SECFundamentals
+    class FixtureHTTP:
+        def get_json(self,url):
+            return {'units':{'USD':[{'start':'2025-07-01','end':'2025-09-30','filed':'2025-10-30','accn':'old','fy':2025,'fp':'Q3','form':'10-Q','val':100},{'start':'2025-07-01','end':'2025-09-30','filed':'2025-11-10','accn':'amended','fy':2025,'fp':'Q3','form':'10-Q/A','val':110}]}}
+    events=SECFundamentals('Radar contact@example.org',FixtureHTTP()).collect('AAPL','0000320193')
+    assert len(events)==3
+    assert all(e.metadata['value']==110 for e in events)
+    assert all(e.metadata['publication_precision']=='filing_date_end_of_day_bound' for e in events)
+    assert all(e.published_at.endswith('23:59:59+00:00') for e in events)
+
+
+def test_news_and_market_fixture_interfaces(monkeypatch):
+    from earnings_radar.providers.news import AlpacaNews
+    from earnings_radar.providers.market_data import AlpacaMarketData
+    monkeypatch.setenv('ALPACA_API_KEY','fixture');monkeypatch.setenv('ALPACA_API_SECRET','fixture')
+    class FixtureHTTP:
+        def get_json(self,url,**kwargs):
+            if '/news' in url:
+                assert kwargs['params']['include_content']=='false'
+                return {'news':[{'id':1,'url':'https://www.wsj.com/example','headline':'Reported event','created_at':NOW.isoformat(),'updated_at':NOW.isoformat(),'symbols':['AAPL'],'source':'WSJ'}],'next_page_token':'page2'}
+            return {'quotes':{'AAPL':{'bp':100,'ap':101,'t':NOW.isoformat(),'bs':1,'as':1}}}
+    events,checkpoint=AlpacaNews(FixtureHTTP()).collect(['AAPL'])
+    assert events[0].provenance=='secondary' and json.loads(checkpoint)['page_token']=='page2'
+    rows=AlpacaMarketData(FixtureHTTP()).collect(['AAPL'])
+    assert rows[0]['feed_type']=='indicative' and rows[0]['ask']==101

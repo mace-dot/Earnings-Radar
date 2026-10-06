@@ -35,8 +35,8 @@ Open the local URL Streamlit prints (usually `http://localhost:8501`).
 
 1. Go to **Import**
 2. Download templates and/or sample CSVs
-3. Click **Load sample data into local DB** (rows are labeled `SAMPLE DATA`)
-4. Open **Radar** to see upcoming events, costs, and flags
+3. Click **Load sample data into local DB** (rows are labeled `SAMPLE DATA`), then select **Demo** mode
+4. Open **Earnings** or **Radar** to see upcoming events, costs, and flags
 5. Add notes under **Research notes**, export under **Export packet**, journal under **Paper journal**
 
 ## CSV formats
@@ -139,3 +139,35 @@ Do not commit keys. When you add a provider:
 ## License
 
 Personal / local research tool. Not investment advice.
+
+## Automatic research and weekly board
+
+The feature implementation adds a separate research database, SEC filings and XBRL
+financial facts, official Federal Reserve RSS, a durable background worker and a
+weekly picks-style research inbox. The board shows actions, evidence strength,
+freshness and missing information. It does not invent betting odds or profitable picks.
+
+```bash
+source .venv/bin/activate
+python -m earnings_radar.database migrate --db data/research.db
+python -m earnings_radar.worker  # independent terminal/process
+streamlit run app.py --server.headless=true --server.address=127.0.0.1 --browser.gatherUsageStats=false
+```
+
+Set a real `SEC_USER_AGENT` contact in ignored `.env` before SEC collection. Start
+Streamlit separately; collection continues when the browser closes. Public sources
+poll every five minutes (XBRL facts hourly), so measured arrival delays are shown rather
+than an instantaneous-data promise. Samples now load only into `data/demo.db`; select
+Demo mode to view them. Existing CSV workflows, notes, exports and paper trades remain.
+
+Bloomberg, WSJ, EarningsHub, Seeking Alpha, Yahoo Finance and Google Finance have
+explicit source-registry entries. They are **not live connections**: authorized APIs,
+credentials and retention rights must be verified. Alpaca news/IEX and the optional
+model/Telegram adapters are implemented but not live-verified without credentials.
+No real-time options feed is configured, so trade evaluations currently reject missing
+or stale data. Only supported standard long-option packages are eligible; scenarios
+are simulated expiration payoffs, not forecasts.
+
+See [implementation status](docs/IMPLEMENTATION_STATUS.md),
+[providers and access](docs/PROVIDERS.md), and [runbook](docs/RUNBOOK.md) for recovery,
+backups, deployment templates, model budget and notification configuration.

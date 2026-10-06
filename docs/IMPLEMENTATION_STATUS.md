@@ -54,3 +54,69 @@ Added the requested sports-picks-style weekly research board: readable event car
 clear action badges, evidence strength and quote limitations. No betting odds or win
 probabilities are fabricated. Source coverage includes named outlets as requirements,
 not claimed working integrations. Direct Truth Social remains unverified.
+
+## Stage 5 and current handoff
+
+Added standard long-call/put/straddle evaluations with leg identities, multipliers, fees,
+ask-plus-slippage assumptions, maximum loss and expiration breakevens/payoffs. Quotes
+must pass synchronization, freshness, announcement timing and OCC identity validation.
+Nonstandard/adjusted contracts are excluded. An evaluation records immutable evidence,
+analysis/alert revision and quote snapshots where available; an eligible current package
+can be logged to paper legs. Manual paper trades remain supported. Imported CSV quotes
+are historical; no fabricated live option candidate appears. Intraday volatility/time
+valuation and a licensed options collector remain unimplemented prerequisites.
+
+Added point-in-time evidence replay without notification side effects, database backup/
+restore CLI, dark sports-picks-style UI theme, earnings result/calendar tabs and local
+single-host restart templates. No deployment has occurred. The UI keeps reported data,
+research hypotheses, missing inputs and simulated evaluation outcomes distinct.
+
+The SEC XBRL collector additionally works live for AAPL, MSFT and NVDA. It retains
+recent reported USD revenue/net income/gross profit where available, source accessions,
+periods and filing-date precision. Comparable historical year-over-year math is separate
+from future guidance and consensus. Schedule source precedence and conflicting source
+records are explicit. Restore and migration rollback have regression coverage.
+
+### Actual verification
+
+- Baseline: 11 tests passed before changes. Final expanded suite and exact final count
+  are recorded below after the final run.
+- Real public collection: SEC submissions, SEC XBRL company-concept data, Fed press and
+  Fed speech RSS all succeeded. An initial transient Fed press 404 was investigated;
+  a successful direct check and retry restored healthy status.
+- Current instance: 87 immutable evidence revisions, 87 analyses and 78 deduplicated
+  inbox alerts from real public metadata. Initial/historical records are backfill;
+  they did not send notifications.
+- Real end-to-end: public SEC financial evidence → stored factual analysis → rendered
+  weekly-board alert → recorded evidence-linked evaluation. Evaluation correctly said
+  WAIT because no verified upcoming schedule or executable option quotes existed.
+- Worker running independently of Streamlit; server health endpoint returned `ok`.
+  AppTest exercised all views and persistent review/evaluation actions.
+- Live Alpaca news/IEX, model and Telegram not tested: credentials absent. Fixture tests
+  prove interface behavior, not production readiness. No notification was sent.
+
+### Remaining limitations and precise next steps
+
+1. Configure entitled news/market API keys securely, verify live authorized responses,
+   and document the contract's delay/retention rights. Bloomberg, WSJ, Seeking Alpha,
+   EarningsHub, Yahoo and Google currently have source-registry requirements only.
+   The user identified earningshub.com; its API/access terms are not verified.
+2. Add a verified upcoming-earnings calendar and entitled synchronized standard-options
+   data collector before enabling live option comparisons. IEX stock data alone is not
+   consolidated option execution data.
+3. Full-document/transcript extraction, consensus expectations, documented supplier/
+   customer coverage and populated independent systemic indicators remain incomplete.
+   Their interfaces are present, with unavailable data explicitly unknown. No stock
+   outperformance, unpriced-information thesis or crash probability is claimed.
+4. Add model credentials only if desired, choose a currently available model and review
+   pricing against the bounded reservation budget. Then verify outputs live; the
+   deterministic factual path already works.
+5. If phone alerts are desired, explicitly configure and verify a destination, then opt
+   in. Delivery uncertainty remains possible under Telegram timeouts.
+6. Review deployment templates, authentication and persistent host/storage before an
+   always-on deployment. A running task process is not autonomous production readiness.
+
+Run commands: see docs/RUNBOOK.md. Dependencies pinned; tracked secrets absent.
+Five scoped feature commits deliver the foundations; main has not been merged.
+
+Final validation: 63 tests passed; pip check reported no broken requirements; git diff --check passed.

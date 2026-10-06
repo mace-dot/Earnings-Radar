@@ -14,7 +14,7 @@ import streamlit as st
 
 from earnings_radar.calculations import realized_pnl, straddle_purchase_cost
 from earnings_radar.quote_selection import select_quote
-from earnings_radar.validation import iso_date
+from earnings_radar.validation import iso_date, ticker as validate_ticker
 from zoneinfo import ZoneInfo
 from datetime import datetime
 from earnings_radar.config import (
@@ -483,8 +483,16 @@ def page_journal() -> None:
         st.write(f"Computed entry debit (per share): **{debit}**")
         submitted = st.form_submit_button("Log open trade")
         if submitted:
-            if not ticker or not expiration or strike <= 0:
-                st.error("Ticker, positive strike, and expiration required.")
+            validation_error = None
+            try:
+                validate_ticker(ticker)
+                expiration = iso_date(expiration)
+                if strike <= 0 or expiration < entry_date.isoformat():
+                    raise ValueError('Positive strike and expiration on/after entry date required.')
+            except (TypeError, ValueError) as exc:
+                validation_error = str(exc)
+            if validation_error:
+                st.error(validation_error)
             else:
                 with get_conn() as conn:
                     add_paper_trade(
@@ -670,9 +678,9 @@ def main() -> None:
         "Today": research_ui.today,
         "Evidence": research_ui.evidence_page,
         "Connections": research_ui.connections,
-        "Earnings": page_radar,
-        "Opportunities": research_ui.today,
-        "Systemic Risk": research_ui.evidence_page,
+        "Earnings": lambda: research_ui.earnings(page_radar),
+        "Opportunities": research_ui.opportunities,
+        "Systemic Risk": research_ui.systemic_page,
         "Radar": page_radar,
         "Import": page_import,
         "Option quotes": page_quotes,
@@ -681,7 +689,10 @@ def main() -> None:
         "Paper journal": page_journal,
         "About": page_about,
     }
-    pages[page]()
+    if mode == "Demo" and page in {"Today","Evidence","Connections","Systemic Risk"}:
+        st.info("Switch to Research mode to view the real research database. Demo imports remain isolated.")
+    else:
+        pages[page]()
 
 
 if __name__ == "__main__":

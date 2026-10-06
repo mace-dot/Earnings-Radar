@@ -87,6 +87,9 @@ def import_earnings_csv(path_or_buffer, *, replace: bool = False) -> dict[str, A
         return {"ok": False, "imported": 0, "errors": errors}
     with get_conn() as conn:
         if replace:
+            conn.execute("DELETE FROM earnings_source_evidence")
+            conn.execute("DELETE FROM earnings_revisions")
+            conn.execute("UPDATE earnings_events SET superseded_by=NULL")
             conn.execute("DELETE FROM earnings_events")
         for _, row in cleaned.iterrows():
             insert_earnings_event(conn, row.to_dict())
@@ -103,7 +106,7 @@ def import_options_csv(path_or_buffer, *, replace: bool = False) -> dict[str, An
         if replace:
             conn.execute("DELETE FROM option_quotes")
         for _, row in cleaned.iterrows():
-            insert_option_quote(conn, row.to_dict())
+            insert_option_quote(conn, {**row.to_dict(), 'feed_type':'historical'})
     return {"ok": True, "imported": len(cleaned), "errors": []}
 
 
@@ -123,6 +126,7 @@ def load_sample_data(*, replace: bool = True, db_path=None):
         return {'ok':False,'errors':errors}
     with get_conn(path) as conn:
         if replace:
+            conn.execute('DELETE FROM earnings_source_evidence')
             conn.execute('DELETE FROM earnings_revisions')
             conn.execute('UPDATE earnings_events SET superseded_by=NULL')
             conn.execute('DELETE FROM earnings_events')

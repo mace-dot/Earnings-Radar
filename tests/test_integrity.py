@@ -11,7 +11,7 @@ from earnings_radar.paper import expiration_pnl, cost
 NOW = datetime(2026,10,6,18,tzinfo=timezone.utc)
 EVENT = dict(ticker='AAA',earnings_date='2026-10-15',earnings_time='AMC',confirmation_status='Confirmed',source='IR')
 def quote(**updates):
-    return dict(ticker='AAA',stock_price=100,strike=100,expiration='2026-10-23',call_bid=4,call_ask=5,put_bid=4,put_ask=5,quote_timestamp=NOW.isoformat(),underlying_timestamp=NOW.isoformat(),call_timestamp=NOW.isoformat(),put_timestamp=NOW.isoformat(),feed_type='live',call_contract_id='CALL',put_contract_id='PUT',**updates)
+    return dict(ticker='AAA',stock_price=100,strike=100,expiration='2026-10-23',call_bid=4,call_ask=5,put_bid=4,put_ask=5,quote_timestamp=NOW.isoformat(),underlying_timestamp=NOW.isoformat(),call_timestamp=NOW.isoformat(),put_timestamp=NOW.isoformat(),feed_type='live',call_contract_id='AAA261023C00100000',put_contract_id='AAA261023P00100000',**updates)
 
 def test_legacy_migration_preserves_and_backs_up(tmp_path):
     path=tmp_path/'old.db'
@@ -23,7 +23,7 @@ def test_legacy_migration_preserves_and_backs_up(tmp_path):
     with get_conn(path) as c:
         assert c.execute('SELECT notes FROM research_notes').fetchone()[0]=='keep'
         assert c.execute('SELECT strategy FROM paper_trades').fetchone()[0]=='long_strangle'
-        assert c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]==6
+        assert c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]==7
         assert c.execute('SELECT COUNT(*) FROM paper_legs').fetchone()[0]==0
     assert len(list((tmp_path/'backups').glob('*.bak')))==1
 
@@ -52,9 +52,9 @@ def test_missing_and_zero_are_distinct():
 
 def test_fresh_selection_and_amc():
     old=quote();old.update(quote_timestamp=(NOW-timedelta(days=3)).isoformat())
-    fresh=quote();fresh.update(strike=105)
+    fresh=quote();fresh.update(strike=105,call_contract_id='AAA261023C00105000',put_contract_id='AAA261023P00105000')
     assert select_quote(EVENT,[old,fresh],now=NOW)['strike']==105
-    same=quote();same.update(expiration='2026-10-15')
+    same=quote();same.update(expiration='2026-10-15',call_contract_id='AAA261015C00100000',put_contract_id='AAA261015P00100000')
     assert select_quote(EVENT,[same],now=NOW) is None
     assert select_quote({**EVENT,'earnings_time':'BMO'},[same],now=NOW)
     assert select_quote({**EVENT,'earnings_time':'Unknown'},[fresh],now=NOW,live=True) is None
@@ -81,3 +81,33 @@ def test_leg_payoff_and_multiplier():
     assert cost(legs,2)==102
     assert expiration_pnl(legs,110,2)==98
     assert expiration_pnl(legs,90,2)==-102
+
+def test_source_precedence_retains_conflict(tmp_path):
+    p=init_db(tmp_path/'r.db')
+    with get_conn(p) as c:
+        first=insert_earnings_event(c,{**EVENT,'provider':'ir','provider_event_id':'Q3'})
+        second=insert_earnings_event(c,{**EVENT,'provider':'csv','earnings_time':'Unknown','confirmation_status':'Estimated'})
+        assert first==second
+        assert c.execute('SELECT earnings_time FROM earnings_events WHERE id=?',(first,)).fetchone()[0]=='AMC'
+        assert c.execute('SELECT COUNT(*) FROM earnings_source_evidence').fetchone()[0]==2
+
+def test_migration_rollback_and_restore(tmp_path,monkeypatch):
+    from earnings_radar.migrations import MIGRATIONS,backup
+    from earnings_radar.database import restore
+    p=init_db(tmp_path/'r.db')
+    with get_conn(p) as c:c.execute("INSERT INTO research_notes(ticker,category,notes,created_at,updated_at) VALUES ('AAA','other','keep','t','t')")
+    saved=backup(p)
+    monkeypatch.setitem(MIGRATIONS,8,'CREATE TABLE partial_failure(id INTEGER); INVALID SQL;')
+    with pytest.raises(sqlite3.OperationalError):init_db(p)
+    with get_conn(p) as c:
+        assert c.execute("SELECT 1 FROM sqlite_master WHERE name='partial_failure'").fetchone() is None
+        assert c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]==7
+        c.execute("UPDATE research_notes SET notes='changed'")
+    with pytest.raises(ValueError):restore(saved,p)
+    restore(saved,p,services_stopped=True)
+    with get_conn(p) as c:assert c.execute('SELECT notes FROM research_notes').fetchone()[0]=='keep'
+
+@pytest.mark.parametrize('changes',[{'call_contract_id':'INVENTED'},{'call_contract_id':'AAA261023P00100000'},{'call_contract_id':'AAA261023C00105000'},{'expiration':'2026-11-20'},{'adjusted':'false'}])
+def test_contract_identity_matches_fields(changes):
+    q=quote();q.update(changes)
+    _,errors=validate_options_df(pd.DataFrame([q]));assert errors

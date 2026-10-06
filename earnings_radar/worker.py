@@ -13,8 +13,9 @@ from earnings_radar.ingestion import ingest
 from earnings_radar.providers.official_feeds import OfficialFeeds,FEEDS
 from earnings_radar.providers.sec import SEC,CIKS
 from earnings_radar.providers.news import AlpacaNews
+from earnings_radar.providers.sec_fundamentals import SECFundamentals
 from earnings_radar.providers.market_data import AlpacaMarketData
-from earnings_radar.providers.base import ProviderError
+from earnings_radar.providers.base import ProviderError,HTTP
 
 class Worker:
     def __init__(self,path=None,settings=None):
@@ -23,11 +24,12 @@ class Worker:
         self.settings=settings or Settings()
         self.owner=str(uuid.uuid4())
         self.stop=threading.Event()
+        self.sec_http=HTTP(self.settings.sec_user_agent or "EarningsRadar/0.2")
         self.feeds=OfficialFeeds()
         self.news=AlpacaNews()
         self.market=AlpacaMarketData()
         self.ciks={**CIKS,**json.loads(os.getenv('RADAR_CIK_MAP','{}'))}
-        names=list(FEEDS)+['sec:'+t for t in self.settings.watchlist]+['alpaca_news','alpaca_market']
+        names=list(FEEDS)+['sec:'+t for t in self.settings.watchlist]+['sec_fundamentals:'+t for t in self.settings.watchlist]+['alpaca_news','alpaca_market']
         with get_conn(self.path) as conn: seed(conn,names)
 
     def heartbeat(self,status='running'):
@@ -37,10 +39,14 @@ class Worker:
     def collect(self,job):
         name=job['name'];checkpoint=job['checkpoint']
         if name in FEEDS: return self.feeds.collect(name),[],utc_now()
+        if name.startswith('sec_fundamentals:'):
+            t=name.split(':',1)[1]
+            if t not in self.ciks:raise ProviderError('CIK mapping missing for '+t)
+            return SECFundamentals(self.settings.sec_user_agent,self.sec_http).collect(t,self.ciks[t]),[],utc_now()
         if name.startswith('sec:'):
             t=name.split(':',1)[1]
             if t not in self.ciks: raise ProviderError('CIK mapping missing for '+t)
-            return SEC(self.settings.sec_user_agent).collect(t,self.ciks[t]),[],utc_now()
+            return SEC(self.settings.sec_user_agent,self.sec_http).collect(t,self.ciks[t]),[],utc_now()
         if name=='alpaca_news':
             events,cp=self.news.collect(self.settings.watchlist,checkpoint)
             return events,[],cp
@@ -59,7 +65,7 @@ class Worker:
                 for event in events: ingest(conn,event,initial=job['last_success'] is None)
                 for q in observations:
                     conn.execute('INSERT OR IGNORE INTO market_observations(ticker,provider,observed_at,retrieved_at,feed_type,payload) VALUES (?,?,?,?,?,?)',(q['ticker'],q['provider'],q['timestamp'],utc_now(),q['feed_type'],json.dumps(q)))
-                finish(conn,job['name'],self.owner,checkpoint=checkpoint,interval=self.settings.poll_seconds)
+                finish(conn,job['name'],self.owner,checkpoint=checkpoint,interval=3600 if job['name'].startswith('sec_fundamentals:') else self.settings.poll_seconds)
         except Exception as exc:
             # Never put provider response bodies, secrets or arbitrary exception URLs in logs.
             error=str(exc) if isinstance(exc,ProviderError) else type(exc).__name__

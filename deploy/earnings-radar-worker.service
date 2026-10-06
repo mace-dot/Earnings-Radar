@@ -1,0 +1,18 @@
+[Unit]
+Description=Earnings Radar background collection
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Earnings-Radar
+EnvironmentFile=%h/.config/earnings-radar.env
+ExecStart=%h/Earnings-Radar/.venv/bin/python -m earnings_radar.worker
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=45
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target

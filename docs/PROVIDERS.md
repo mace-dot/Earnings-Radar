@@ -70,3 +70,16 @@ Political headlines remain statements/proposals/unknown unless evidence supports
 more specific status. Secondary news never proves policy enactment. Direct Truth Social
 API access is unverified; no scraping workaround is implemented. An entitled news
 adapter can supply attributed secondary coverage after live access is verified.
+
+## Verified public financial facts
+
+The SEC XBRL company-concept collector requests USD revenue, net income/loss and gross
+profit for the watchlist. It retains at most four recent comparable quarter/year periods
+per tag, with accession, fiscal labels, period start/end and latest filed revision. Missing
+tags stay missing. Filing dates have day precision; stored end-of-day bounds are labeled,
+not presented as exact intraday publication times. Collection is hourly. These reported
+historical facts are not consensus, an earnings-calendar forecast, or a current price.
+The Earnings view compares only similar-duration prior-year periods where present and
+provides both evidence references. Live authorized requests succeeded for all three
+seeded companies. CSV option imports are classified historical regardless of a caller's
+`live` label; only a separately authorized/verified live pipeline may assert live coverage.

@@ -36,6 +36,11 @@ CREATE TABLE model_spend(day TEXT PRIMARY KEY, reserved_usd REAL NOT NULL DEFAUL
 CREATE TABLE alerts(id INTEGER PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, evidence_id INTEGER NOT NULL REFERENCES evidence(id), analysis_id INTEGER NOT NULL REFERENCES analyses(id), severity TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, read_at TEXT, payload TEXT NOT NULL);
 CREATE TABLE outbox(id INTEGER PRIMARY KEY, alert_id INTEGER NOT NULL REFERENCES alerts(id), revision INTEGER NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt REAL NOT NULL DEFAULT 0, lease_owner TEXT, lease_until REAL NOT NULL DEFAULT 0, last_error TEXT, delivered_at TEXT, UNIQUE(alert_id,revision,channel));
 ''',
+7: '''
+ALTER TABLE earnings_events ADD COLUMN source_priority INTEGER NOT NULL DEFAULT 10;
+CREATE TABLE earnings_source_evidence(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL REFERENCES earnings_events(id),provider TEXT NOT NULL,provider_event_id TEXT,observed_at TEXT NOT NULL,payload TEXT NOT NULL);
+CREATE INDEX idx_schedule_source_identity ON earnings_source_evidence(provider,provider_event_id);
+''',
 6: '''
 CREATE TABLE source_registry(id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,documentation_url TEXT NOT NULL,access_status TEXT NOT NULL,capabilities TEXT NOT NULL);
 ''',

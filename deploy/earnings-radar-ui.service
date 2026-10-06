@@ -1,0 +1,16 @@
+[Unit]
+Description=Earnings Radar personal dashboard
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Earnings-Radar
+EnvironmentFile=%h/.config/earnings-radar.env
+ExecStart=%h/Earnings-Radar/.venv/bin/python -m streamlit run app.py --server.headless=true --server.address=127.0.0.1 --server.port=8501 --browser.gatherUsageStats=false
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=true
+UMask=0077
+
+[Install]
+WantedBy=default.target
