@@ -8,13 +8,15 @@ earnings move, implied move models, or breakout probabilities.
 from __future__ import annotations
 
 from typing import Any, Optional
+import math
 
 
 def _num(value: Any) -> Optional[float]:
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        result = float(value)
+        return result if math.isfinite(result) else None
     except (TypeError, ValueError):
         return None
 
@@ -104,7 +106,7 @@ def enrich_quote_row(row: dict[str, Any]) -> dict[str, Any]:
     out["put_spread_pct"] = spread_pct(row.get("put_bid"), row.get("put_ask"))
     cost = straddle_purchase_cost(row.get("call_ask"), row.get("put_ask"))
     out["straddle_ask_cost"] = cost
-    out["contract_cost"] = contract_cost(cost)
+    out["contract_cost"] = contract_cost(cost, int(row.get("multiplier", 100)))
     be_lo, be_hi = expiration_breakevens(
         row.get("strike"), row.get("call_ask"), row.get("put_ask")
     )

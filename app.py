@@ -13,6 +13,10 @@ import pandas as pd
 import streamlit as st
 
 from earnings_radar.calculations import realized_pnl, straddle_purchase_cost
+from earnings_radar.quote_selection import select_quote
+from earnings_radar.validation import iso_date
+from zoneinfo import ZoneInfo
+from datetime import datetime
 from earnings_radar.config import (
     CONFIRMATION_STATUSES,
     EXPORTS_DIR,
@@ -68,7 +72,7 @@ def page_radar() -> None:
     st.header("Radar — upcoming earnings")
     st.caption(DISCLAIMER)
 
-    today = st.date_input("As-of date (upcoming filter)", value=date.today())
+    today = st.date_input("As-of date (upcoming filter)", value=datetime.now(ZoneInfo("America/New_York")).date())
     col_a, col_b, col_c = st.columns(3)
     with col_a:
         status_filter = st.multiselect(
@@ -86,7 +90,7 @@ def page_radar() -> None:
             conn,
             """
             SELECT * FROM earnings_events
-            WHERE earnings_date >= ?
+            WHERE earnings_date >= ? AND superseded_by IS NULL
             ORDER BY earnings_date ASC, ticker ASC
             """,
             (today.isoformat(),),
@@ -100,34 +104,11 @@ def page_radar() -> None:
         }
         all_quotes = fetch_all(conn, "SELECT * FROM option_quotes ORDER BY ticker, id DESC")
 
-    # Fallback: most recently inserted quote per ticker
-    quote_by_ticker: dict[str, dict] = {}
-    for q in all_quotes:
-        if q["ticker"] not in quote_by_ticker:
-            quote_by_ticker[q["ticker"]] = q
-
-    # Prefer nearest-to-spot complete quote when available
-    best: dict[str, dict] = {}
-    for q in all_quotes:
-        t = q["ticker"]
-        if q.get("call_ask") is None or q.get("put_ask") is None:
-            continue
-        if q.get("stock_price") is None or q.get("strike") is None:
-            continue
-        dist = abs(float(q["strike"]) - float(q["stock_price"]))
-        prev = best.get(t)
-        if prev is None or dist < prev["_dist"]:
-            best[t] = {**q, "_dist": dist}
-    for t, q in best.items():
-        q2 = dict(q)
-        q2.pop("_dist", None)
-        quote_by_ticker[t] = q2
-
     rows = []
     for ev in events:
         if ev["confirmation_status"] not in status_filter:
             continue
-        q = quote_by_ticker.get(ev["ticker"])
+        q = select_quote(ev, all_quotes)
         if require_quote and not q:
             continue
         ann = annotate_radar_row(ev, q, note_counts.get(ev["ticker"], 0))
@@ -180,7 +161,7 @@ def page_radar() -> None:
         )
         return
 
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
     with st.expander("How to read the numbers"):
         st.markdown(
@@ -234,6 +215,7 @@ def page_import() -> None:
         )
         if st.button("Load sample data into local DB", type="primary"):
             result = load_sample_data(replace=True)
+            st.info("Samples loaded into the separate demo database. Switch to Demo mode in the sidebar to view them.")
             if result["ok"]:
                 st.success(
                     f"Loaded {result['earnings_imported']} earnings rows and "
@@ -343,7 +325,7 @@ def page_quotes() -> None:
     else:
         st.write("No earnings event linked for this ticker.")
 
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 def page_research() -> None:
@@ -471,17 +453,15 @@ def page_journal() -> None:
                 "Strategy",
                 [
                     "long_straddle",
-                    "long_strangle",
                     "long_call",
                     "long_put",
-                    "other",
                 ],
             )
             contracts = st.number_input("Contracts", min_value=1, value=1)
         with c2:
             strike = st.number_input("Strike", min_value=0.0, value=100.0, format="%.2f")
             expiration = st.text_input("Expiration (YYYY-MM-DD)", value="")
-            entry_date = st.date_input("Entry date", value=date.today())
+            entry_date = st.date_input("Entry date", value=datetime.now(ZoneInfo("America/New_York")).date())
         with c3:
             entry_call_ask = st.number_input("Entry call ask", min_value=0.0, value=0.0, format="%.2f")
             entry_put_ask = st.number_input("Entry put ask", min_value=0.0, value=0.0, format="%.2f")
@@ -503,8 +483,8 @@ def page_journal() -> None:
         st.write(f"Computed entry debit (per share): **{debit}**")
         submitted = st.form_submit_button("Log open trade")
         if submitted:
-            if not ticker:
-                st.error("Ticker required.")
+            if not ticker or not expiration or strike <= 0:
+                st.error("Ticker, positive strike, and expiration required.")
             else:
                 with get_conn() as conn:
                     add_paper_trade(
@@ -513,11 +493,11 @@ def page_journal() -> None:
                             "ticker": ticker,
                             "strategy": strategy,
                             "strike": strike,
-                            "expiration": expiration or None,
+                            "expiration": iso_date(expiration),
                             "contracts": int(contracts),
                             "entry_date": entry_date.isoformat(),
-                            "entry_call_ask": entry_call_ask or None,
-                            "entry_put_ask": entry_put_ask or None,
+                            "entry_call_ask": entry_call_ask,
+                            "entry_put_ask": entry_put_ask,
                             "entry_debit": debit,
                             "fees": fees,
                             "thesis": thesis,
@@ -561,7 +541,7 @@ def page_journal() -> None:
                 for t in trades
             ]
         ),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -580,7 +560,7 @@ def page_journal() -> None:
         selected = next(t for t in open_trades if t["id"] == trade_id)
         c1, c2, c3 = st.columns(3)
         with c1:
-            exit_date = st.date_input("Exit date", value=date.today(), key="exit_date")
+            exit_date = st.date_input("Exit date", value=datetime.now(ZoneInfo("America/New_York")).date(), key="exit_date")
             exit_call_bid = st.number_input("Exit call bid", min_value=0.0, value=0.0, format="%.2f")
         with c2:
             exit_put_bid = st.number_input("Exit put bid", min_value=0.0, value=0.0, format="%.2f")
@@ -613,8 +593,8 @@ def page_journal() -> None:
                     conn,
                     trade_id,
                     exit_date.isoformat(),
-                    exit_call_bid or None,
-                    exit_put_bid or None,
+                    exit_call_bid,
+                    exit_put_bid,
                     float(credit),
                     float(exit_fees),
                     float(pnl) if pnl is not None else 0.0,
@@ -656,7 +636,12 @@ def page_about() -> None:
 
 
 def main() -> None:
-    _ensure_db()
+    import earnings_radar.db as db
+    from earnings_radar.config import DATA_DIR, DB_PATH
+    mode = st.sidebar.selectbox('Operating mode', ['Research', 'Demo'])
+    db.DB_OVERRIDE.set(DATA_DIR / 'demo.db' if mode == 'Demo' else DB_PATH)
+    init_db()
+    st.sidebar.caption('SAMPLE DATA — isolated demo storage' if mode == 'Demo' else 'Real research — no sample fallback')
     st.sidebar.title("Earnings Radar")
     st.sidebar.caption("Local CSV → SQLite research MVP")
     page = st.sidebar.radio(

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+from contextvars import ContextVar
+DB_OVERRIDE = ContextVar("earnings_radar_db_override", default=None)
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,9 +19,11 @@ def utc_now() -> str:
 
 
 def connect(db_path: Optional[Path] = None) -> sqlite3.Connection:
-    path = Path(db_path or DB_PATH)
+    path = Path(db_path or DB_OVERRIDE.get() or DB_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=15)
+    conn.execute("PRAGMA busy_timeout = 15000")
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -114,39 +119,52 @@ CREATE INDEX IF NOT EXISTS idx_trades_ticker ON paper_trades(ticker);
 
 def init_db(db_path: Optional[Path] = None) -> Path:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    path = Path(db_path or DB_PATH)
+    path = Path(db_path or DB_OVERRIDE.get() or DB_PATH)
     with get_conn(path) as conn:
         conn.executescript(SCHEMA_SQL)
+        from earnings_radar.migrations import migrate
+        migrate(conn, path)
     return path
 
 
 def insert_earnings_event(conn: sqlite3.Connection, row: dict[str, Any]) -> int:
+    from earnings_radar.validation import ticker, iso_date, text
+    ticker_value = ticker(row['ticker'])
+    day = iso_date(row['earnings_date'])
     now = utc_now()
-    cur = conn.execute(
-        """
-        INSERT INTO earnings_events (
-            ticker, earnings_date, earnings_time, confirmation_status, source,
-            created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(ticker, earnings_date, earnings_time) DO UPDATE SET
-            confirmation_status = excluded.confirmation_status,
-            source = excluded.source,
-            updated_at = excluded.updated_at
-        """,
-        (
-            row["ticker"].upper(),
-            row["earnings_date"],
-            row.get("earnings_time") or "Unknown",
-            row.get("confirmation_status") or "Unconfirmed",
-            row.get("source") or "",
-            now,
-            now,
-        ),
-    )
-    return int(cur.lastrowid or 0)
+    provider = row.get('provider', 'csv')
+    identity = row.get('provider_event_id')
+    period = row.get('fiscal_period')
+    if identity:
+        existing = conn.execute("SELECT * FROM earnings_events WHERE provider=? AND provider_event_id=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (provider,identity)).fetchone()
+    elif period:
+        existing = conn.execute("SELECT * FROM earnings_events WHERE ticker=? AND fiscal_period=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (ticker_value,period)).fetchone()
+    else:
+        existing = conn.execute("SELECT * FROM earnings_events WHERE ticker=? AND earnings_date=? AND superseded_by IS NULL ORDER BY id DESC LIMIT 1", (ticker_value,day)).fetchone()
+    values = (ticker_value, day, text(row.get('earnings_time'),'Unknown'), text(row.get('confirmation_status'),'Unconfirmed'), text(row.get('source')), now, now, provider, identity, period, row.get('feed_type','historical'))
+    if existing and all(existing[k] == values[i] for i,k in enumerate(['ticker','earnings_date','earnings_time','confirmation_status','source'])):
+        return existing['id']
+    # Never discard conflicting source evidence. CSV identities without a fiscal period
+    # can only reconcile same-day schedule changes; cross-date matching is not guessed.
+    if existing:
+        conn.execute('INSERT INTO earnings_revisions(event_id,recorded_at,payload) VALUES (?,?,?)', (existing['id'],now,json.dumps(dict(existing))))
+        exact = conn.execute('SELECT id FROM earnings_events WHERE ticker=? AND earnings_date=? AND earnings_time=?', values[:3]).fetchone()
+        if exact and exact['id'] == existing['id']:
+            conn.execute('UPDATE earnings_events SET confirmation_status=?,source=?,updated_at=?,revision=revision+1 WHERE id=?', (values[3],values[4],now,existing['id']))
+            return existing['id']
+        if exact:
+            new_id = exact['id']
+            conn.execute('UPDATE earnings_events SET superseded_by=NULL WHERE id=?', (new_id,))
+        else:
+            new_id = conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type,revision) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (*values,existing['revision']+1)).lastrowid
+        conn.execute('UPDATE earnings_events SET superseded_by=? WHERE id=?', (new_id,existing['id']))
+        return int(new_id)
+    return int(conn.execute("INSERT INTO earnings_events(ticker,earnings_date,earnings_time,confirmation_status,source,created_at,updated_at,provider,provider_event_id,fiscal_period,feed_type) VALUES (?,?,?,?,?,?,?,?,?,?,?)", values).lastrowid)
 
 
 def insert_option_quote(conn: sqlite3.Connection, row: dict[str, Any]) -> int:
+    from earnings_radar.validation import validate_quote
+    row = validate_quote(row)
     cur = conn.execute(
         """
         INSERT INTO option_quotes (
@@ -174,7 +192,10 @@ def insert_option_quote(conn: sqlite3.Connection, row: dict[str, Any]) -> int:
             utc_now(),
         ),
     )
-    return int(cur.lastrowid or 0)
+    quote_id = int(cur.lastrowid or 0)
+    conn.execute("UPDATE option_quotes SET feed_type=?,underlying_timestamp=?,call_timestamp=?,put_timestamp=?,call_contract_id=?,put_contract_id=?,multiplier=?,adjusted=? WHERE id=?", (row['feed_type'], row.get('underlying_timestamp'),row.get('call_timestamp'),row.get('put_timestamp'),row.get('call_contract_id'),row.get('put_contract_id'),row['multiplier'],int(bool(row.get('adjusted',False))),quote_id))
+    return quote_id
+
 
 
 def fetch_all(conn: sqlite3.Connection, sql: str, params: tuple = ()) -> list[dict[str, Any]]:
@@ -222,6 +243,8 @@ def delete_research_note(conn: sqlite3.Connection, note_id: int) -> None:
 
 
 def add_paper_trade(conn: sqlite3.Connection, trade: dict[str, Any]) -> int:
+    from earnings_radar.paper import from_manual
+    legs = from_manual(trade)
     now = utc_now()
     cur = conn.execute(
         """
@@ -257,7 +280,12 @@ def add_paper_trade(conn: sqlite3.Connection, trade: dict[str, Any]) -> int:
             now,
         ),
     )
-    return int(cur.lastrowid or 0)
+    trade_id = int(cur.lastrowid or 0)
+    for leg in legs:
+        conn.execute('INSERT INTO paper_legs(trade_id,side,quantity,strike,expiration,option_type,multiplier,contract_id,premium) VALUES (?,?,?,?,?,?,?,?,?)', (trade_id,leg['side'],leg['quantity'],leg['strike'],leg['expiration'],leg['option_type'],leg['multiplier'],leg.get('contract_id'),leg['premium']))
+    conn.execute('UPDATE paper_trades SET evaluation_id=?,origin=? WHERE id=?', (trade.get('evaluation_id'),trade.get('origin','manual_simulation'),trade_id))
+    return trade_id
+
 
 
 def close_paper_trade(

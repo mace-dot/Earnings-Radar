@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from earnings_radar.calculations import enrich_quote_row, spread_pct
+from earnings_radar.quote_selection import rejection_reasons
 
 
 def _num(value: Any) -> Optional[float]:
@@ -198,6 +199,7 @@ def annotate_radar_row(
         )
     else:
         row["liquidity_flags"] = ["no_option_quote"]
+    row["execution_flags"] = rejection_reasons(quote, event, now=now, live=True) if quote else ["no_eligible_quote"]
     row["research_flag_count"] = len(row["research_flags"])
     row["liquidity_flag_count"] = len(row["liquidity_flags"])
     return row

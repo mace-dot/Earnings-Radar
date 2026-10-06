@@ -14,12 +14,13 @@ def test_sample_import(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(config, "DB_PATH", db_path)
     monkeypatch.setattr(db, "DB_PATH", db_path)
 
-    result = load_sample_data(replace=True)
+    demo_path = tmp_path / "demo.db"
+    result = load_sample_data(replace=True, db_path=demo_path)
     assert result["ok"] is True
     assert result["earnings_imported"] == 4
     assert result["options_imported"] == 6
 
-    with db.get_conn(db_path) as conn:
+    with db.get_conn(demo_path) as conn:
         n_e = conn.execute("SELECT COUNT(*) AS n FROM earnings_events").fetchone()["n"]
         n_o = conn.execute("SELECT COUNT(*) AS n FROM option_quotes").fetchone()["n"]
     assert n_e == 4

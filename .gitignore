@@ -24,3 +24,9 @@ exports/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Durable research runtime
+data/backups/
+data/*.db-wal
+data/*.db-shm
+*.log

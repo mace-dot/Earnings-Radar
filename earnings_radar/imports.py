@@ -42,119 +42,41 @@ def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _optional_float(value: Any) -> Optional[float]:
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return None
-    if isinstance(value, str) and value.strip() == "":
-        return None
-    return float(value)
+from earnings_radar.validation import text, ticker, iso_date, validate_quote
 
 
-def _optional_int(value: Any) -> Optional[int]:
-    f = _optional_float(value)
-    return None if f is None else int(f)
-
-
-def validate_earnings_df(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    errors: list[str] = []
+def validate_earnings_df(df):
     df = _normalize_columns(df)
     missing = [c for c in EARNINGS_COLUMNS if c not in df.columns]
     if missing:
         return df, [f"Missing required columns: {', '.join(missing)}"]
-
-    cleaned_rows: list[dict[str, Any]] = []
-    for i, row in df.iterrows():
-        line = int(i) + 2  # header + 1-based
-        ticker = str(row.get("ticker") or "").strip().upper()
-        if not ticker:
-            errors.append(f"Row {line}: ticker is required")
-            continue
-        earnings_date = str(row.get("earnings_date") or "").strip()
-        if not earnings_date:
-            errors.append(f"Row {line}: earnings_date is required")
-            continue
-        earnings_time = str(row.get("earnings_time") or "Unknown").strip() or "Unknown"
-        if earnings_time not in EARNINGS_TIMES:
-            errors.append(
-                f"Row {line}: earnings_time must be one of {', '.join(EARNINGS_TIMES)}"
-            )
-            continue
-        status = str(row.get("confirmation_status") or "Unconfirmed").strip() or "Unconfirmed"
-        if status not in CONFIRMATION_STATUSES:
-            errors.append(
-                f"Row {line}: confirmation_status must be one of "
-                f"{', '.join(CONFIRMATION_STATUSES)}"
-            )
-            continue
-        cleaned_rows.append(
-            {
-                "ticker": ticker,
-                "earnings_date": earnings_date[:10],
-                "earnings_time": earnings_time,
-                "confirmation_status": status,
-                "source": str(row.get("source") or "").strip(),
-            }
-        )
-    return pd.DataFrame(cleaned_rows), errors
+    cleaned, errors = [], []
+    for line, (_, row) in enumerate(df.iterrows(), 2):
+        try:
+            time = text(row.get('earnings_time'), 'Unknown')
+            status = text(row.get('confirmation_status'), 'Unconfirmed')
+            if time not in EARNINGS_TIMES:
+                raise ValueError('invalid earnings_time')
+            if status not in CONFIRMATION_STATUSES:
+                raise ValueError('invalid confirmation_status')
+            cleaned.append(dict(ticker=ticker(row.get('ticker')), earnings_date=iso_date(row.get('earnings_date')), earnings_time=time, confirmation_status=status, source=text(row.get('source')), provider=text(row.get('provider'),'csv'),provider_event_id=text(row.get('provider_event_id')) or None,fiscal_period=text(row.get('fiscal_period')) or None,feed_type=text(row.get('feed_type'),'historical')))
+        except (TypeError, ValueError) as exc:
+            errors.append(f'Row {line}: {exc}')
+    return pd.DataFrame(cleaned, dtype=object), errors
 
 
-def validate_options_df(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    errors: list[str] = []
+def validate_options_df(df):
     df = _normalize_columns(df)
-    missing = [c for c in ("ticker", "strike", "expiration") if c not in df.columns]
+    missing = [c for c in ('ticker','strike','expiration') if c not in df.columns]
     if missing:
         return df, [f"Missing required columns: {', '.join(missing)}"]
-
-    for col in OPTION_COLUMNS:
-        if col not in df.columns:
-            df[col] = None
-
-    cleaned_rows: list[dict[str, Any]] = []
-    for i, row in df.iterrows():
-        line = int(i) + 2
-        ticker = str(row.get("ticker") or "").strip().upper()
-        if not ticker:
-            errors.append(f"Row {line}: ticker is required")
-            continue
+    cleaned, errors = [], []
+    for line, (_, row) in enumerate(df.iterrows(), 2):
         try:
-            strike = _optional_float(row.get("strike"))
-        except (TypeError, ValueError):
-            errors.append(f"Row {line}: strike must be numeric")
-            continue
-        if strike is None:
-            errors.append(f"Row {line}: strike is required")
-            continue
-        expiration = str(row.get("expiration") or "").strip()
-        if not expiration:
-            errors.append(f"Row {line}: expiration is required")
-            continue
-        try:
-            cleaned_rows.append(
-                {
-                    "ticker": ticker,
-                    "stock_price": _optional_float(row.get("stock_price")),
-                    "strike": strike,
-                    "expiration": expiration[:10],
-                    "call_bid": _optional_float(row.get("call_bid")),
-                    "call_ask": _optional_float(row.get("call_ask")),
-                    "put_bid": _optional_float(row.get("put_bid")),
-                    "put_ask": _optional_float(row.get("put_ask")),
-                    "quote_timestamp": (
-                        None
-                        if row.get("quote_timestamp") is None
-                        or (isinstance(row.get("quote_timestamp"), float) and pd.isna(row.get("quote_timestamp")))
-                        else str(row.get("quote_timestamp")).strip()
-                    ),
-                    "call_volume": _optional_int(row.get("call_volume")),
-                    "put_volume": _optional_int(row.get("put_volume")),
-                    "call_open_interest": _optional_int(row.get("call_open_interest")),
-                    "put_open_interest": _optional_int(row.get("put_open_interest")),
-                    "source": str(row.get("source") or "").strip(),
-                }
-            )
+            cleaned.append(validate_quote(row.to_dict()))
         except (TypeError, ValueError) as exc:
-            errors.append(f"Row {line}: invalid numeric field ({exc})")
-    return pd.DataFrame(cleaned_rows), errors
+            errors.append(f'Row {line}: {exc}')
+    return pd.DataFrame(cleaned, dtype=object), errors
 
 
 def import_earnings_csv(path_or_buffer, *, replace: bool = False) -> dict[str, Any]:
@@ -185,23 +107,31 @@ def import_options_csv(path_or_buffer, *, replace: bool = False) -> dict[str, An
     return {"ok": True, "imported": len(cleaned), "errors": []}
 
 
-def load_sample_data(*, replace: bool = True) -> dict[str, Any]:
-    """Load clearly labeled sample CSVs into the local DB."""
-    earn_path = SAMPLES_DIR / "sample_earnings_calendar.csv"
-    opt_path = SAMPLES_DIR / "sample_option_chains.csv"
-    if not earn_path.exists() or not opt_path.exists():
-        return {
-            "ok": False,
-            "errors": [f"Sample files missing under {SAMPLES_DIR}"],
-        }
-    e = import_earnings_csv(earn_path, replace=replace)
-    o = import_options_csv(opt_path, replace=replace)
-    return {
-        "ok": e["ok"] and o["ok"],
-        "earnings_imported": e.get("imported", 0),
-        "options_imported": o.get("imported", 0),
-        "errors": e.get("errors", []) + o.get("errors", []),
-    }
+def load_sample_data(*, replace: bool = True, db_path=None):
+    """Samples live exclusively in a separate demo DB; never clear the real DB."""
+    from earnings_radar.config import DATA_DIR
+    from earnings_radar.validation import validate_quote
+    path = Path(db_path or DATA_DIR / 'demo.db')
+    import earnings_radar.db as db
+    if path.resolve() == Path(db.DB_PATH).resolve():
+        raise ValueError('sample database must differ from the real database')
+    init_db(path)
+    e, errors = validate_earnings_df(pd.read_csv(SAMPLES_DIR / 'sample_earnings_calendar.csv'))
+    # Sample timestamps deliberately describe a fictional historical snapshot.
+    o = pd.read_csv(SAMPLES_DIR / 'sample_option_chains.csv')
+    if errors:
+        return {'ok':False,'errors':errors}
+    with get_conn(path) as conn:
+        if replace:
+            conn.execute('DELETE FROM earnings_revisions')
+            conn.execute('UPDATE earnings_events SET superseded_by=NULL')
+            conn.execute('DELETE FROM earnings_events')
+            conn.execute('DELETE FROM option_quotes')
+        for _, row in e.iterrows():
+            insert_earnings_event(conn, {**row.to_dict(),'feed_type':'sample'})
+        for _, row in o.iterrows():
+            insert_option_quote(conn, {**row.to_dict(),'feed_type':'sample'})
+    return {'ok':True,'earnings_imported':len(e),'options_imported':len(o),'errors':[], 'db_path':str(path)}
 
 
 def read_template_bytes(name: str) -> bytes:

@@ -8,6 +8,7 @@ from typing import Any, Optional
 from earnings_radar.calculations import enrich_quote_row
 from earnings_radar.db import fetch_all, get_conn, init_db
 from earnings_radar.flags import annotate_radar_row
+from earnings_radar.quote_selection import select_quote
 
 
 DISCLAIMER = (
@@ -35,7 +36,7 @@ def build_research_packet(ticker: str) -> str:
             conn,
             """
             SELECT * FROM earnings_events
-            WHERE ticker = ?
+            WHERE ticker = ? AND superseded_by IS NULL
             ORDER BY earnings_date DESC
             """,
             (t,),
@@ -85,13 +86,14 @@ def build_research_packet(ticker: str) -> str:
         for ev in events:
             note_count = len(notes)
             # Prefer latest quote for flag annotation
-            q = quotes[0] if quotes else None
+            q = select_quote(ev, quotes)
             ann = annotate_radar_row(ev, q, note_count)
             lines.extend(
                 [
                     f"- **Date:** {ev['earnings_date']} ({ev['earnings_time']})",
                     f"- **Confirmation:** {ev['confirmation_status']}",
                     f"- **Source:** {ev['source'] or 'n/a'}",
+                    f"- **Selected quote ID:** {q['id'] if q else 'none eligible'}",
                     f"- **Research flags:** {', '.join(ann['research_flags']) or 'none'}",
                     "",
                 ]
