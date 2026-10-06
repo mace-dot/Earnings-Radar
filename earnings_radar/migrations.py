@@ -36,6 +36,12 @@ CREATE TABLE model_spend(day TEXT PRIMARY KEY, reserved_usd REAL NOT NULL DEFAUL
 CREATE TABLE alerts(id INTEGER PRIMARY KEY, story_key TEXT NOT NULL UNIQUE, evidence_id INTEGER NOT NULL REFERENCES evidence(id), analysis_id INTEGER NOT NULL REFERENCES analyses(id), severity TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1, read_at TEXT, payload TEXT NOT NULL);
 CREATE TABLE outbox(id INTEGER PRIMARY KEY, alert_id INTEGER NOT NULL REFERENCES alerts(id), revision INTEGER NOT NULL, channel TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt REAL NOT NULL DEFAULT 0, lease_owner TEXT, lease_until REAL NOT NULL DEFAULT 0, last_error TEXT, delivered_at TEXT, UNIQUE(alert_id,revision,channel));
 ''',
+6: '''
+CREATE TABLE source_registry(id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL,documentation_url TEXT NOT NULL,access_status TEXT NOT NULL,capabilities TEXT NOT NULL);
+''',
+5: '''
+CREATE TABLE market_observations(id INTEGER PRIMARY KEY,ticker TEXT NOT NULL,provider TEXT NOT NULL,observed_at TEXT NOT NULL,retrieved_at TEXT NOT NULL,feed_type TEXT NOT NULL,payload TEXT NOT NULL, UNIQUE(ticker,provider,observed_at));
+''',
 4: '''
 CREATE TABLE evaluations(id INTEGER PRIMARY KEY, alert_id INTEGER REFERENCES alerts(id), evidence_id INTEGER REFERENCES evidence(id), quote_id INTEGER REFERENCES option_quotes(id), created_at TEXT NOT NULL, config TEXT NOT NULL, payload TEXT NOT NULL);
 ALTER TABLE paper_trades ADD COLUMN evaluation_id INTEGER REFERENCES evaluations(id);
@@ -68,7 +74,7 @@ def migrate(conn, path):
         version = conn.execute('SELECT COALESCE(MAX(version),0) FROM schema_version').fetchone()[0] if exists else 0
         if version > max(MIGRATIONS):
             raise RuntimeError('database schema is newer than this application')
-        pending = [v for v in MIGRATIONS if v > version]
+        pending = sorted(v for v in MIGRATIONS if v > version)
         if pending:
             # The writer has made no changes yet; a separate reader gets a consistent snapshot.
             backup(path)

@@ -23,7 +23,7 @@ def test_legacy_migration_preserves_and_backs_up(tmp_path):
     with get_conn(path) as c:
         assert c.execute('SELECT notes FROM research_notes').fetchone()[0]=='keep'
         assert c.execute('SELECT strategy FROM paper_trades').fetchone()[0]=='long_strangle'
-        assert c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]==4
+        assert c.execute('SELECT MAX(version) FROM schema_version').fetchone()[0]==6
         assert c.execute('SELECT COUNT(*) FROM paper_legs').fetchone()[0]==0
     assert len(list((tmp_path/'backups').glob('*.bak')))==1
 
