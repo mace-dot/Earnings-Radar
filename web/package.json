@@ -1,0 +1,1 @@
+{"name":"earnings-radar-web","private":true,"scripts":{"build":"node --check public/app.js"},"engines":{"node":">=22"}}

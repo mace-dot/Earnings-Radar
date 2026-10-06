@@ -2,6 +2,11 @@
 
 Local earnings research dashboard built with **Python**, **Streamlit**, and **SQLite**.
 
+The lightweight public website for **Vercel + Supabase** is in `web/`. Follow
+[the setup guide](docs/VERCEL_SUPABASE.md) to create the database, deploy with
+Vercel's Root Directory set to `web`, and enable hourly GitHub collection.
+The public website publishes research only; the local paper journal remains in Streamlit.
+
 CSV-first MVP for tracking upcoming earnings, reviewing option-chain snapshots, attaching research notes, exporting LLM research packets, and journaling paper trades.
 
 ## Principles
