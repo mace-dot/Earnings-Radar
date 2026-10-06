@@ -54,3 +54,19 @@ def test_api_missing_config_is_actionable_and_does_not_leak_key(monkeypatch):
         assert json.loads(text)['events'] == []
     finally:
         server.shutdown(); server.server_close(); thread.join()
+
+
+def test_new_supabase_secret_key_not_sent_as_invalid_bearer(monkeypatch):
+    import web.api._store as module
+    monkeypatch.setenv('SUPABASE_URL','https://example.supabase.co')
+    monkeypatch.setenv('SUPABASE_SERVICE_ROLE_KEY','sb_secret_test')
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def read(self,*args): return b'[]'
+    def send(request, **kwargs):
+        assert request.get_header('Authorization') is None
+        assert request.get_header('Apikey') == 'sb_secret_test'
+        return Response()
+    monkeypatch.setattr(module,'urlopen',send)
+    assert Store().request('radar_events') == []

@@ -19,6 +19,10 @@ jobs:
       SEC_USER_AGENT: EarningsRadar mace@udel.edu
       RADAR_MODEL_ENABLED: 'false'
       RADAR_TELEGRAM_ENABLED: 'false'
+      ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+      ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+      RADAR_WATCHLIST: ${{ vars.RADAR_WATCHLIST || 'AAPL,MSFT,NVDA' }}
+      RADAR_CIK_MAP: ${{ vars.RADAR_CIK_MAP || '{}' }}
     steps:
       - name: Check database configuration
         run: |

@@ -42,7 +42,7 @@ async function load() {
   try {
     const r = await fetch('/api/dashboard'); const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Unable to load research');
-    events = data.events || []; const status = data.status?.[0]; coverage = status?.payload?.sources || [];
+    events = data.events || []; const status = data.status?.[0]; coverage = status?.payload?.sources || []; tracked = status?.payload?.watchlist || ['AAPL','MSFT','NVDA']; quant = status?.payload?.quantitative || {}; fundamentals = status?.payload?.fundamentals || {}; renderWatchlist();
     document.querySelector('#count').textContent = String(events.length);
     const age = status ? (Date.now() - new Date(status.updated_at).valueOf()) / 3600000 : Infinity;
     document.querySelector('#freshness').textContent = status ? `${age > 2 ? 'STALE · ' : ''}Last collection ${date(status.updated_at)} · hourly schedule, timing may vary` : 'Database connected · awaiting first collection';
@@ -55,3 +55,46 @@ async function load() {
 }
 document.querySelectorAll('[data-filter]').forEach(b => b.addEventListener('click', () => { filter = b.dataset.filter; document.querySelectorAll('[data-filter]').forEach(x => x.classList.toggle('active', x === b)); render(); }));
 document.querySelector('#search').addEventListener('input', render); document.querySelector('#refresh').addEventListener('click', load); load();
+
+let tracked = ['AAPL','MSFT','NVDA'], quant = {}, fundamentals = {}, selectedStock = null;
+let extra = [];
+try { extra = JSON.parse(localStorage.getItem('radar-watchlist') || '[]').filter(s => typeof s === 'string' && /^[A-Z][A-Z0-9.-]{0,9}$/.test(s)).slice(0,20); } catch { extra = []; }
+function metric(parent, label, value, suffix = '', scale = 1) {
+  const n = el('div', label); n.append(el('strong', typeof value === 'number' && Number.isFinite(value) ? (value*scale).toFixed(2)+suffix : 'Unavailable')); parent.append(n);
+}
+function renderWatchlist() {
+  const root = document.querySelector('#watchlist'); root.replaceChildren();
+  for (const symbol of [...new Set([...tracked, ...extra])]) {
+    const q = quant[symbol] || {}, n = el('article', undefined, 'card'); n.append(el('h2', symbol));
+    const count = events.filter(e => e.tickers.includes(symbol)).length;
+    n.append(el('p', `${count} collected source records · ${tracked.includes(symbol) ? 'Collector watchlist' : 'Browser watchlist; automatic collection not configured'}`));
+    if (q.status === 'available') {
+      n.append(el('p', `Daily-bar statistics as of ${q.as_of_session} · IEX coverage`));
+      const grid = el('div', undefined, 'metric-grid');
+      metric(grid, '20-session annualized volatility', q.realized_volatility_20, '%', 100);
+      metric(grid, '60-session annualized volatility', q.realized_volatility_60, '%', 100);
+      metric(grid, 'Latest return z-score', q.latest_return_zscore);
+      metric(grid, 'Average true range / price', q.atr_percent_14, '%', 100);
+      metric(grid, '20-session momentum', q.momentum_20, '%', 100);
+      metric(grid, 'Drawdown from 60-session high', q.drawdown_60, '%', 100);
+      metric(grid, '60-session beta vs SPY', q.beta_60);
+      n.append(grid); list(n, 'Research flags', q.flags); n.append(el('p', q.interpretation));
+    } else n.append(el('p', q.status === 'insufficient_history' ? `Need 61 daily bars; ${q.available_bars} available.` : 'Quantitative signals unavailable: historical market data is not connected or has not been collected.'));
+    const facts = fundamentals[symbol] || [];
+    for (const f of facts) { n.append(el('p', `${f.metric}: ${Number(f.reported_value_usd).toLocaleString()} USD · period ended ${f.period_end} · ${typeof f.year_over_year_pct === 'number' ? f.year_over_year_pct.toFixed(2)+'% year-over-year' : 'Comparable prior year unavailable'}`)); }
+    n.append(el('p', 'Consensus gap: unverified. A contrarian thesis needs documented market expectations, comparable results, a catalyst, and counterevidence.'));
+    const actions = el('div', undefined, 'watch-actions'), view = el('button', selectedStock === symbol ? 'Show all companies' : 'View company research');
+    view.addEventListener('click', () => { selectedStock = selectedStock === symbol ? null : symbol; document.querySelector('#search').value = selectedStock || ''; filter = 'all'; document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active',b.dataset.filter === 'all')); render(); renderWatchlist(); }); actions.append(view);
+    if (!tracked.includes(symbol)) { const remove = el('button', 'Remove'); remove.addEventListener('click', () => { extra = extra.filter(s => s !== symbol); saveWatchlist(); renderWatchlist(); }); actions.append(remove); }
+    n.append(actions); root.append(n);
+  }
+}
+function saveWatchlist() { try { localStorage.setItem('radar-watchlist', JSON.stringify(extra)); } catch { document.querySelector('#watchlist-message').textContent = 'Browser storage is unavailable; changes apply to this visit only.'; } }
+document.querySelector('#watchlist-form').addEventListener('submit', e => {
+  e.preventDefault(); const input = document.querySelector('#watchlist-symbol'), s = input.value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(s)) { document.querySelector('#watchlist-message').textContent = 'Enter a valid ticker symbol.'; return; }
+  if (extra.length >= 20) { document.querySelector('#watchlist-message').textContent = 'Browser watchlist limit: 20 extra stocks.'; return; }
+  if (!tracked.includes(s) && !extra.includes(s)) extra.push(s); saveWatchlist(); input.value = ''; renderWatchlist();
+  document.querySelector('#watchlist-message').textContent = `${s} added. Browser additions filter existing research; they do not enable new backend collection. The collector watchlist is configured separately.`;
+});
+renderWatchlist();
