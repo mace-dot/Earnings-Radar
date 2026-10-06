@@ -12,7 +12,7 @@ SOURCES = [
 ('alpaca_market','Alpaca IEX','market_data','https://docs.alpaca.markets/docs/market-data-faq','credentials_required','Single-exchange indicative quotes; no options coverage'),
 ('bloomberg','Bloomberg','news','https://www.bloomberg.com/professional/','licensed_access_required','Needs licensed API/data-feed agreement; no paywall scraping'),
 ('wsj','Wall Street Journal / Dow Jones','news','https://www.wsj.com/','licensed_access_required','Needs authorized Dow Jones feed/API and retention agreement'),
-('earningshub','EarningsHub','earnings_calendar','','identity_unconfirmed','Exact site/API required; no endpoint assumed'),
+('earningshub','EarningsHub','earnings_calendar','https://earningshub.com/','authorized_api_unconfirmed','Website identified; authorized API and retention terms still unverified'),
 ('seeking_alpha','Seeking Alpha','institutional_research','https://seekingalpha.com/','licensed_access_required','Contributor opinion distinguished from primary evidence; licensed feed required'),
 ('yahoo_finance','Yahoo Finance','news_market_data','https://finance.yahoo.com/','authorized_api_unconfirmed','No unofficial endpoint or cookie/auth workaround'),
 ('google_finance','Google Finance','market_data','https://www.google.com/finance/','authorized_api_unconfirmed','No supported authorized API verified; do not scrape'),

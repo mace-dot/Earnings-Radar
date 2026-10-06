@@ -50,3 +50,23 @@ Set `ALPACA_API_KEY` and `ALPACA_API_SECRET` securely; never commit values.
 Poll collection is a reconnect strategy; no websocket latency claim is made.
 Run one collector per machine initially; multiple machines must share an aggregate
 rate limiter and move durable state to Postgres before deployment.
+
+## Model and political coverage
+
+The optional Anthropic Messages interface was checked against the official
+https://github.com/anthropics/anthropic-sdk-python README. Model calls use a fixed HTTPS
+host, no tools, bounded context and 2,000 output tokens. Set `ANTHROPIC_API_KEY` securely,
+`RADAR_MODEL_ENABLED=true`, an available `RADAR_MODEL`, and a daily reservation budget.
+Each call reserves $0.10 pessimistically; this is not measured invoice spending. Confirm
+current model pricing is within that ceiling before enabling. Model faults fall back to
+factual notices. No live call or model efficacy claim has been made.
+
+EarningsHub was identified by the user as https://earningshub.com/. Access was blocked
+by the environment network policy; authorized API terms remain unverified. No endpoint
+was invented. SEC now uses the user's provided real contact through local ignored
+configuration; it does not require a SEC account.
+
+Political headlines remain statements/proposals/unknown unless evidence supports a
+more specific status. Secondary news never proves policy enactment. Direct Truth Social
+API access is unverified; no scraping workaround is implemented. An entitled news
+adapter can supply attributed secondary coverage after live access is verified.

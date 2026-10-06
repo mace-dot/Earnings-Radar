@@ -26,3 +26,17 @@ Writes are idempotent; revisions and hashes preserved. Initial/history ingestion
 flagged backfill. No paywall scraping or undocumented Yahoo/Google/Truth API workaround.
 Worker is independent of Streamlit. 36 tests passed. Public requests succeeded;
 SEC collection awaits request identification, and licensed adapters await credentials.
+
+## Stage 3
+
+Implemented typed analyses, exact stored-evidence reference validation, factual notices,
+political status classification, documented/dated relationship queries and conservative
+systemic dimensions. Deterministic notices work without a model. An optional bounded
+Anthropic Messages adapter has a daily reservation budget, timeout, schema validation,
+and factual fallback on failure. Official Anthropic SDK README was inspected on GitHub;
+live model access remains unverified. Metadata alone does not establish guidance changes,
+consensus, financial mechanisms, market reaction or a trading advantage.
+
+43 tests passed, including unsupported facts/tickers, model failures, budget exhaustion,
+corrections, retries and replay isolation. Analysis inbox/outbox foundations accompany
+this stage so deterministic output is immediately usable by the worker.
