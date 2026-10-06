@@ -5,8 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class Fact(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
     evidence_id:int
-    field:Literal['title','published_at','url']
+    field:Literal['title','published_at','url','document_excerpt']
     excerpt:str=Field(min_length=1,max_length=2000)
+    start:int|None=None
+    end:int|None=None
 
 class Analysis(BaseModel):
     model_config=ConfigDict(extra='forbid',strict=True)
@@ -39,7 +41,13 @@ def validate_analysis(payload,evidence):
     if not analysis.confirmed_facts:
         raise ValueError('at least one evidence reference required')
     for fact in analysis.confirmed_facts:
-        if fact.evidence_id != evidence['id'] or fact.excerpt not in evidence[fact.field]:
+        if fact.evidence_id != evidence['id']:
+            raise ValueError('fact does not resolve to stored evidence')
+        if fact.field=='document_excerpt':
+            excerpts=json.loads(evidence['metadata']).get('excerpts',[])
+            if not any(e['text']==fact.excerpt and e['start']==fact.start and e['end']==fact.end for e in excerpts):
+                raise ValueError('document excerpt/offset does not resolve')
+        elif fact.excerpt not in evidence[fact.field]:
             raise ValueError('fact does not resolve to stored evidence')
     if analysis.suggested_action=='evaluate defined-risk strategy':
         raise ValueError('analysis cannot suggest a trade without a separate verified evaluation')

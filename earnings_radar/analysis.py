@@ -19,9 +19,12 @@ def factual_analysis(evidence):
         mechanism={"RevenueFromContractWithCustomerExcludingAssessedTax":"Reported revenue measures operating scale. Costs, margins and expectations are needed to assess valuation implications.","NetIncomeLoss":"Reported net income/loss measures historical profitability; cash conversion, financing and expectations still need review.","GrossProfit":"Reported gross profit links revenue and direct costs; operating expenses and period comparability still need review."}[tag]
         bullish=["Improving comparable results could support the thesis; do not infer growth or an earnings beat from an isolated value."]
         bearish=["Historical results may already be priced in; weak cash conversion, lower guidance or high expectations could offset them."]
+    facts=[{'evidence_id':evidence['id'],'field':'title','excerpt':evidence['title']}]
+    for snippet in metadata.get('excerpts',[])[:3]:
+        facts.append({'evidence_id':evidence['id'],'field':'document_excerpt','excerpt':snippet['text'],'start':snippet['start'],'end':snippet['end']})
     return validate_analysis({
         'event_id':evidence['id'],'affected_tickers':json.loads(evidence['tickers']),
-        'confirmed_facts':[{'evidence_id':evidence['id'],'field':'title','excerpt':evidence['title']}],
+        'confirmed_facts':facts,
         'hypotheses':[], 'economic_mechanism':mechanism,
         'bullish_implications':bullish,'bearish_implications':bearish,'counterevidence':[],
         'time_horizon':horizon,'observed_reaction':'Unknown: no synchronized market reaction verified',

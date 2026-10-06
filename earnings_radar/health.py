@@ -9,7 +9,7 @@ def snapshot(conn,*,now=None):
     alive=any(w['status']=='running' and (now-datetime.fromisoformat(w['heartbeat'])).total_seconds()<90 for w in workers)
     jobs=fetch_all(conn,'SELECT name,status,last_success,last_error,failures,next_run FROM jobs ORDER BY name')
     for j in jobs:
-        if j['last_success'] and (now-datetime.fromisoformat(j['last_success'])).total_seconds()>(4500 if j['name'].startswith('sec_fundamentals:') else 900):
+        if j['last_success'] and (now-datetime.fromisoformat(j['last_success'])).total_seconds()>(90000 if j['name'].startswith('document:') else (4500 if j['name'].startswith('sec_fundamentals:') else 900)):
             j['status']='stale'
     coverage=fetch_all(conn,'SELECT provider,MAX(retrieved_at) AS last_retrieval,COUNT(*) AS revisions FROM evidence GROUP BY provider')
     last=conn.execute('SELECT e.published_at,e.first_seen_at,e.retrieved_at,a.created_at AS analyzed_at FROM evidence e LEFT JOIN analyses a ON a.evidence_id=e.id ORDER BY e.id DESC LIMIT 1').fetchone()

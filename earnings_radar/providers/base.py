@@ -30,7 +30,7 @@ class HTTP:
         self.user_agent = user_agent
         self.last_request = 0.0
 
-    def request(self, method, url, *, headers=None, params=None, json=None):
+    def request(self, method, url, *, headers=None, params=None, json=None, max_bytes=5_000_000):
         parsed = urlsplit(url)
         if parsed.scheme != 'https' or parsed.hostname not in ALLOWED_HOSTS or parsed.username or parsed.password or parsed.port not in (None,443):
             raise ProviderError('destination is not allowlisted HTTPS')
@@ -45,8 +45,8 @@ class HTTP:
                 chunks=[]; size=0
                 for chunk in response.iter_content(65536):
                     size+=len(chunk)
-                    if size > 5_000_000:
-                        raise ProviderError('response exceeds 5 MB limit')
+                    if size > max_bytes:
+                        raise ProviderError(f'response exceeds {max_bytes//1_000_000} MB limit')
                     chunks.append(chunk)
                 return b''.join(chunks)
         except requests.RequestException:

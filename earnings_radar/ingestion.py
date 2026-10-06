@@ -22,6 +22,11 @@ def ingest(conn,event,*,now=None,initial=False,replay=False):
     # Exact normalized headlines suppress syndicated copies; source URL groups corrections.
     normalized=' '.join(event.title.lower().split())
     story_key=hashlib.sha256(normalized.encode()).hexdigest()
+    if event.provider=='sec_document':
+        parent=conn.execute('SELECT * FROM evidence WHERE id=?',(event.metadata.get('parent_evidence_id'),)).fetchone()
+        if not parent or parent['provider']!='sec' or parent['provider_event_id']!=event.event_id or parent['url']!=url:
+            raise ValueError('document parent does not resolve to primary evidence')
+        story_key=parent['story_key']
     previous=conn.execute('SELECT * FROM evidence WHERE provider=? AND provider_event_id=? ORDER BY revision DESC LIMIT 1',(event.provider,event.event_id)).fetchone()
     if previous:
         story_key=previous['story_key']

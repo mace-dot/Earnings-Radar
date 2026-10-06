@@ -117,6 +117,22 @@ records are explicit. Restore and migration rollback have regression coverage.
    always-on deployment. A running task process is not autonomous production readiness.
 
 Run commands: see docs/RUNBOOK.md. Dependencies pinned; tracked secrets absent.
-Five scoped feature commits deliver the foundations; main has not been merged.
+Five stage commits plus a focused primary-document follow-up deliver the foundations; main has not been merged.
 
 Final validation: 63 tests passed; pip check reported no broken requirements; git diff --check passed.
+
+
+### Primary-document follow-up
+
+Added bounded SEC filing HTML retrieval and exact excerpts with source body/text hashes,
+normalized text character offsets and evidence validation. Script/style text is excluded;
+retrieved instructions remain untrusted data. Document evidence links to its parent
+story, so additional primary context does not create duplicate inbox alerts. Relevant
+filing excerpts appear in the alert detail. This is not full licensed transcript analysis
+or independent verification of management assertions. SEC documents are capped at 20 MB;
+ordinary API responses remain capped at 5 MB. One larger filing triggered the original
+5 MB cap; the documented SEC-only limit was raised and the affected job retried.
+
+Final suite after document follow-up: 65 tests passed. GitHub feature branch push
+succeeded; draft PR creation returned Forbidden from the GitHub GraphQL API. No PR
+was created or merged. Manual review URL is provided in the final handoff.

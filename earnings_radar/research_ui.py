@@ -64,7 +64,7 @@ def today():
         health=snapshot(conn);rows=board_rows(conn)
     c1,c2,c3=st.columns(3)
     c1.metric('Worker',health['worker'].replace('_',' ').title())
-    c2.metric('Sources with evidence',len(health['coverage']))
+    c2.metric('Feeds with evidence',len(health['coverage']))
     c3.metric('Research alerts',len(rows))
     st.caption('Picks are a research shortlist, not betting odds or promises of returns. Source evidence and trade eligibility are separate.')
     if health['worker']!='running':st.warning('Background collection is stopped or unknown. Start the worker from Connections; this screen does not run collection.')
@@ -80,6 +80,14 @@ def today():
             with st.expander('Evidence, bull/bear case & invalidation'):
                 a=json.loads(row['analysis_payload']);p=json.loads(row['payload'])
                 st.link_button('Open source',p['primary_evidence']['url'])
+                with get_conn(path) as conn:
+                    docs=fetch_all(conn,"SELECT id,metadata FROM evidence WHERE provider='sec_document' AND json_extract(metadata,'$.parent_evidence_id')=? ORDER BY revision DESC LIMIT 1",(row['evidence_id'],))
+                if docs:
+                    metadata=json.loads(docs[0]['metadata'])
+                    st.caption('Primary filing excerpts — issuer statements, not independent confirmation. Offsets refer to normalized filing text.')
+                    for snippet in metadata.get('excerpts',[])[:3]:
+                        st.text(snippet['text'])
+                        st.caption(f"Evidence #{docs[0]['id']} · characters {snippet['start']}–{snippet['end']}")
                 st.write('Bull case:', '; '.join(a['bullish_implications']) or 'Not established')
                 st.write('Bear case:', '; '.join(a['bearish_implications']) or 'Not established')
                 st.write('Counterevidence:', '; '.join(a['counterevidence']) or 'Not yet collected')

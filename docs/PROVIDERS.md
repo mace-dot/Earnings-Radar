@@ -83,3 +83,12 @@ The Earnings view compares only similar-duration prior-year periods where presen
 provides both evidence references. Live authorized requests succeeded for all three
 seeded companies. CSV option imports are classified historical regardless of a caller's
 `live` label; only a separately authorized/verified live pipeline may assert live coverage.
+
+
+SEC document collection follows only stored /Archives/ references from the submissions
+adapter, retrieves at most three recent filings per watchlist company initially, and
+stores at most eight bounded relevant excerpts per filing. Script/style text is never
+executed or interpreted as instructions. Rechecks occur daily; new filings can seed
+new document jobs. This adds primary document context to the original alert, not an
+independent corroborating source. Long filings have a 20 MB response cap and longer
+files remain explicitly unavailable. Licensed transcripts are not collected.

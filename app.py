@@ -58,7 +58,6 @@ DISCLAIMER = (
 )
 
 
-@st.cache_resource
 def _ensure_db() -> str:
     path = init_db()
     return str(path)

@@ -30,7 +30,11 @@ class Worker:
         self.market=AlpacaMarketData()
         self.ciks={**CIKS,**json.loads(os.getenv('RADAR_CIK_MAP','{}'))}
         names=list(FEEDS)+['sec:'+t for t in self.settings.watchlist]+['sec_fundamentals:'+t for t in self.settings.watchlist]+['alpaca_news','alpaca_market']
-        with get_conn(self.path) as conn: seed(conn,names)
+        with get_conn(self.path) as conn:
+            seed(conn,names)
+            for t in self.settings.watchlist:
+                parents=conn.execute("SELECT id FROM evidence WHERE provider='sec' AND json_extract(tickers,'$[0]')=? ORDER BY published_at DESC LIMIT 3",(t,)).fetchall()
+                seed(conn,['document:'+str(p['id']) for p in parents])
 
     def heartbeat(self,status='running'):
         with get_conn(self.path) as conn:
@@ -38,6 +42,11 @@ class Worker:
 
     def collect(self,job):
         name=job['name'];checkpoint=job['checkpoint']
+        if name.startswith('document:'):
+            from earnings_radar.providers.documents import collect
+            with get_conn(self.path) as conn:
+                parent=dict(conn.execute('SELECT * FROM evidence WHERE id=?',(int(name.split(':')[1]),)).fetchone())
+            return [collect(parent,self.sec_http)],[],utc_now()
         if name in FEEDS: return self.feeds.collect(name),[],utc_now()
         if name.startswith('sec_fundamentals:'):
             t=name.split(':',1)[1]
@@ -62,10 +71,14 @@ class Worker:
             with get_conn(self.path) as conn:
                 conn.execute('BEGIN IMMEDIATE')
                 verify_lease(conn,job['name'],self.owner)
-                for event in events: ingest(conn,event,initial=job['last_success'] is None)
+                document_jobs=[]
+                for event in events:
+                    evidence_id,created=ingest(conn,event,initial=job['last_success'] is None)
+                    if event.provider=='sec' and created and len(document_jobs)<3:document_jobs.append('document:'+str(evidence_id))
+                seed(conn,document_jobs)
                 for q in observations:
                     conn.execute('INSERT OR IGNORE INTO market_observations(ticker,provider,observed_at,retrieved_at,feed_type,payload) VALUES (?,?,?,?,?,?)',(q['ticker'],q['provider'],q['timestamp'],utc_now(),q['feed_type'],json.dumps(q)))
-                finish(conn,job['name'],self.owner,checkpoint=checkpoint,interval=3600 if job['name'].startswith('sec_fundamentals:') else self.settings.poll_seconds)
+                finish(conn,job['name'],self.owner,checkpoint=checkpoint,interval=86400 if job['name'].startswith('document:') else (3600 if job['name'].startswith('sec_fundamentals:') else self.settings.poll_seconds))
         except Exception as exc:
             # Never put provider response bodies, secrets or arbitrary exception URLs in logs.
             error=str(exc) if isinstance(exc,ProviderError) else type(exc).__name__
