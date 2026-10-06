@@ -647,6 +647,12 @@ def main() -> None:
     page = st.sidebar.radio(
         "Navigate",
         [
+            "Today",
+            "Opportunities",
+            "Earnings",
+            "Systemic Risk",
+            "Evidence",
+            "Connections",
             "Radar",
             "Import",
             "Option quotes",
@@ -659,7 +665,14 @@ def main() -> None:
     st.sidebar.markdown("---")
     st.sidebar.caption(DISCLAIMER)
 
+    from earnings_radar import research_ui
     pages = {
+        "Today": research_ui.today,
+        "Evidence": research_ui.evidence_page,
+        "Connections": research_ui.connections,
+        "Earnings": page_radar,
+        "Opportunities": research_ui.today,
+        "Systemic Risk": research_ui.evidence_page,
         "Radar": page_radar,
         "Import": page_import,
         "Option quotes": page_quotes,

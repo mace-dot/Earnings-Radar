@@ -40,3 +40,17 @@ consensus, financial mechanisms, market reaction or a trading advantage.
 43 tests passed, including unsupported facts/tickers, model failures, budget exhaustion,
 corrections, retries and replay isolation. Analysis inbox/outbox foundations accompany
 this stage so deterministic output is immediately usable by the worker.
+
+## Stage 4
+
+Implemented persistent in-app inbox, revision updates, reviewed state and an optional
+Telegram delivery outbox with severity filtering, leased attempts, quiet hours,
+cooldowns, bounded retries and backfill/replay suppression. Telegram stays disabled
+unless credentials, opt-in and a verified destination are configured. No message sent.
+Delivery is at-least-once under ambiguous network failure: Telegram does not provide
+an idempotency key for sendMessage. A crash after acceptance may cause a duplicate.
+
+Added the requested sports-picks-style weekly research board: readable event cards,
+clear action badges, evidence strength and quote limitations. No betting odds or win
+probabilities are fabricated. Source coverage includes named outlets as requirements,
+not claimed working integrations. Direct Truth Social remains unverified.
