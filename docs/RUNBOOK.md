@@ -18,7 +18,7 @@ python -m earnings_radar.database migrate --db data/research.db
 pytest -q
 ```
 
-Python 3.12 is tested. Requirements pin the tested dependency set. Tracked source and
+Python 3.12 is tested. Requirements pin tested direct dependencies; pip resolves compatible platform-specific transitive dependencies. Tracked source and
 lock state are on `feature/autonomous-earnings-research`; no merge is performed.
 Each schema upgrade takes a short write lock and a consistent SQLite online backup.
 Versions apply transactionally. A failed migration rolls back; fix the diagnosed cause
@@ -132,3 +132,23 @@ Replay consumes only evidence/revisions known at the supplied as-of time and can
 send notifications. It is an engineering test, not evidence of profitability. Historical
 licensed quote data, point-in-time universe coverage and execution latency are not
 available; survivor bias and missing cost/performance data remain explicit limitations.
+
+
+## macOS installation recovery
+
+Use Python 3.12 rather than the older macOS system Python. With Homebrew:
+
+```bash
+brew install python@3.12
+cd ~/Earnings-Radar
+git pull --ff-only
+python3.12 -m venv .venv312
+source .venv312/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+If Homebrew is unavailable, install Python 3.12 from python.org's macOS downloads
+before the `python3.12` command. The new `.venv312` preserves the previous environment.
+The portable requirements avoid freezing cloud-only transitive package versions.

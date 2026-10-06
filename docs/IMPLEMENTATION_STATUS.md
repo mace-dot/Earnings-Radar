@@ -136,3 +136,9 @@ ordinary API responses remain capped at 5 MB. One larger filing triggered the or
 Final suite after document follow-up: 65 tests passed. GitHub feature branch push
 succeeded; draft PR creation returned Forbidden from the GitHub GraphQL API. No PR
 was created or merged. Manual review URL is provided in the final handoff.
+
+
+macOS follow-up: replaced the full cloud dependency freeze with stable direct pins
+(Streamlit 1.50, Altair 5.5, pandas 2.3.3, numpy 2.2.6 and compatible calendar 4.11.2),
+and documented Python 3.12/pip upgrade recovery. Fresh installation and suite validation
+are recorded in the follow-up handoff; native macOS execution is not available here.
