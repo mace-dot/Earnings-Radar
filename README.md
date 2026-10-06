@@ -171,3 +171,17 @@ are simulated expiration payoffs, not forecasts.
 See [implementation status](docs/IMPLEMENTATION_STATUS.md),
 [providers and access](docs/PROVIDERS.md), and [runbook](docs/RUNBOOK.md) for recovery,
 backups, deployment templates, model budget and notification configuration.
+
+
+## Hosted URL through Render
+
+A GitHub-connected Render Blueprint is prepared in `render.yaml`. It uses Python 3.12,
+runs the dashboard and collector together, retains SQLite on a persistent disk, and
+requires a generated dashboard password. In Render choose **New → Blueprint**, select
+this repository and branch **feature/autonomous-earnings-research**, enter the requested
+SEC User-Agent, and review the Starter service/disk costs before creation. Main remains
+the older app. Deployment has not been performed from this session.
+
+See [hosting setup](docs/HOSTING.md) for account connection, access and validation.
+Vercel is not a direct host for this Streamlit/continuous-worker architecture; Supabase
+is an optional future database/auth component rather than an app host.

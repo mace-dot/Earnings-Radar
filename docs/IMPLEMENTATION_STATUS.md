@@ -142,3 +142,21 @@ macOS follow-up: replaced the full cloud dependency freeze with stable direct pi
 (Streamlit 1.50, Altair 5.5, pandas 2.3.3, numpy 2.2.6 and compatible calendar 4.11.2),
 and documented Python 3.12/pip upgrade recovery. Fresh installation and suite validation
 are recorded in the follow-up handoff; native macOS execution is not available here.
+
+
+## Render hosting preparation
+
+User selected Render to preserve the current app. Added root render.yaml Blueprint,
+Python 3.12 Docker image, combined UI/worker supervision, persistent database/export
+paths, build exclusions for private data, and a fail-closed hosted password gate.
+Render generates the dashboard password and prompts for the real SEC User-Agent.
+A single Starter instance plus a 1 GB disk is specified; user must review cost before
+creating paid resources. No resources purchased and no Render service created.
+
+Validation: 68 tests passed in a fresh Python environment and in the built image;
+container UI health, worker heartbeat, mounted data paths and shutdown were checked.
+The cloud proxy required ephemeral build-only DNS/trust configuration; TLS checks
+stayed enabled. Render has not been tested live because no account/token binding is
+available. Connect GitHub and select feature/autonomous-earnings-research in Render's
+New Blueprint flow. See docs/HOSTING.md for the exact steps. Supabase is optional
+future shared storage/auth, not necessary for the first single-host review URL.

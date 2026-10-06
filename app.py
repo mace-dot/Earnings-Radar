@@ -643,6 +643,8 @@ def page_about() -> None:
 
 
 def main() -> None:
+    from earnings_radar.access import require_access
+    require_access()
     import earnings_radar.db as db
     from earnings_radar.config import DATA_DIR, DB_PATH
     mode = st.sidebar.selectbox('Operating mode', ['Research', 'Demo'])

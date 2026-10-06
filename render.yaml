@@ -1,0 +1,29 @@
+# Review Render's displayed service and disk prices before creating this Blueprint.
+services:
+  - type: web
+    name: earnings-radar
+    runtime: docker
+    repo: https://github.com/mace-dot/Earnings-Radar
+    branch: feature/autonomous-earnings-research
+    plan: starter
+    numInstances: 1
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /_stcore/health
+    autoDeploy: true
+    disk:
+      name: earnings-radar-data
+      mountPath: /var/lib/earnings-radar
+      sizeGB: 1
+    envVars:
+      - key: RADAR_DASHBOARD_PASSWORD
+        generateValue: true
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: RADAR_REQUIRE_AUTH
+        value: "true"
+      - key: RADAR_WATCHLIST
+        value: AAPL,MSFT,NVDA
+      - key: RADAR_MODEL_ENABLED
+        value: "false"
+      - key: RADAR_TELEGRAM_ENABLED
+        value: "false"

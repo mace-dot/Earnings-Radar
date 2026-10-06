@@ -13,7 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT_DIR / "data"
 TEMPLATES_DIR = DATA_DIR / "templates"
 SAMPLES_DIR = DATA_DIR / "samples"
-EXPORTS_DIR = ROOT_DIR / "exports"
+EXPORTS_DIR = Path(os.getenv("EARNINGS_RADAR_EXPORTS_DIR", ROOT_DIR / "exports"))
 
 DB_PATH = Path(os.getenv("EARNINGS_RADAR_DB_PATH", DATA_DIR / "earnings_radar.db"))
 
