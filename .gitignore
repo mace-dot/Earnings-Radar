@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+.env
+.Python
+dist/
+build/
+
+# App data
+data/*.db
+data/*.db-journal
+exports/
+*.csv.bak
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+.pytest_cache/
+.coverage
+htmlcov/

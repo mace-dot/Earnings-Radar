@@ -1,0 +1,5 @@
+ticker,earnings_date,earnings_time,confirmation_status,source
+SAMPLE_AAA,2026-10-15,AMC,Confirmed,SAMPLE DATA — fictional IR page (not live)
+SAMPLE_BBB,2026-10-22,BMO,Estimated,SAMPLE DATA — third-party calendar estimate
+SAMPLE_CCC,2026-10-28,AMC,Unconfirmed,SAMPLE DATA — no primary source attached
+SAMPLE_DDD,2026-11-05,During Market,Confirmed,SAMPLE DATA — press release archive link
