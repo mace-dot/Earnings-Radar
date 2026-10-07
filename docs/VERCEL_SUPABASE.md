@@ -63,3 +63,13 @@ Supabase handles email/password account creation and email confirmation. Configu
 The public API interprets source evidence with conditional mechanisms and matched-period financial calculations. It supports today's brief, a research candidate board, company dossiers with annual revenue charts, macro context, history, and operational source health. Ranking components are shown; there is no calibrated predictive model. History retains revisions and source facts, but profit/outcome evaluation remains unavailable without suitable price histories.
 
 Run Python tests and `npm ci --prefix web && npm run build --prefix web`. The UI smoke test covers navigation, dossier rendering, missing-data labels and malicious-source text. The standard-library Vercel collector never calls a paid model, accesses a brokerage, or bypasses licensed sources. Free-tier quotas and platform schedule reliability still apply.
+
+## Stock pick-board interface and private ideas
+
+Apply `202610060003_ideas.sql` after the earlier migrations. Saved ideas are private account records, with RLS and a 20-idea database cap. The backend validates each company's supporting evidence before saving an Up or Down hypothesis. This is a research lineup, not an order ticket or a recommendation. Signing out clears the displayed lineup; saved account data remains private.
+
+The default screen uses compact company tiles and plain-language business context. Up/Down buttons explore buying individual calls/puts, as specified by the user. Big-swing filtering requires fresh historical volatility data; no data yields an explicit empty state. Funding flags retain their financial period and evidence. They do not estimate a market-wide crisis probability. Historical growth never determines a stock-price direction or establishes an executable option trade.
+
+The Robinhood checklist explains what to check manually in the brokerage: expiration, strike, quoted premium, spread, and catalyst timing. A standard 100-share long-option calculator computes total premium, maximum premium loss, break-even at expiration, and a user-entered expiration payoff before fees. It fetches no Robinhood credentials, places no orders, and does not model the option's price before expiration. Adjusted/nonstandard contracts are outside this calculator's scope.
+
+The UI includes a glossary, keyboard focus indicators, a skip link, selection states, mobile layouts and a mobile lineup shortcut. Methodology/source details remain available through company details and Data checks. The public API now returns `move_board` summaries; saved ideas use authenticated `/api/ideas` endpoints.

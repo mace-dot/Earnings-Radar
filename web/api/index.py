@@ -32,6 +32,10 @@ class handler(BaseHTTPRequestHandler):
                 user=current_user(store,self.headers.get('Cookie'))
                 rows=store.request('radar_watchlists',query='select=symbol,created_at&user_id=eq.'+user['id']+'&order=created_at.asc')
                 return self.respond(200,{'watchlist':[r['symbol'] for r in rows]})
+            if path=='/api/ideas':
+                user=current_user(store,self.headers.get('Cookie'))
+                rows=store.request('radar_ideas',query='select=symbol,direction,evidence_id,created_at&user_id=eq.'+user['id']+'&order=created_at.desc&limit=50')
+                return self.respond(200,{'ideas':rows})
             if path=='/api/collect':
                 secret=os.getenv('CRON_SECRET','')
                 if not secret or not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+secret):return self.respond(401,{'error':'Scheduled collector authorization required'})
@@ -65,6 +69,21 @@ class handler(BaseHTTPRequestHandler):
                 return self.respond(200,{'signed_in':True},[cookie('radar_session',data['access_token'],int(data.get('expires_in',3600))),cookie('radar_refresh',data['refresh_token'],604800)])
             user=current_user(store,self.headers.get('Cookie'))
             if path=='/api/collect':return self.respond(200,run(store))
+            if path=='/api/ideas':
+                symbol=payload.get('symbol');direction=payload.get('direction')
+                if not isinstance(symbol,str) or not re.fullmatch(r'[A-Z][A-Z0-9.-]{0,9}',symbol) or direction not in ('up','down'):return self.respond(400,{'error':'Choose a company and an up or down research idea'})
+                if payload.get('action')=='remove':
+                    store.request('radar_ideas',query='user_id=eq.'+user['id']+'&symbol=eq.'+symbol+'&direction=eq.'+direction,method='DELETE')
+                elif payload.get('action')=='save':
+                    eid=payload.get('evidence_id')
+                    if not isinstance(eid,str) or not re.fullmatch(r'[a-f0-9]{64}',eid):return self.respond(400,{'error':'Supporting evidence required'})
+                    evidence=store.request('radar_events',query='select=tickers&id=eq.'+eid+'&limit=1')
+                    if not evidence or symbol not in evidence[0]['tickers']:return self.respond(400,{'error':'Evidence does not support this company'})
+                    existing=store.request('radar_ideas',query='select=symbol,direction&user_id=eq.'+user['id']+'&limit=50')
+                    if len(existing)>=20 and not any(r['symbol']==symbol and r['direction']==direction for r in existing):return self.respond(400,{'error':'Keep up to 20 saved research ideas'})
+                    store.request('radar_ideas',rows=[{'user_id':user['id'],'symbol':symbol,'direction':direction,'evidence_id':eid}],conflict='user_id,symbol,direction')
+                else:return self.respond(400,{'error':'Unknown idea action'})
+                return self.respond(200,{'saved':True})
             if path=='/api/watchlist':
                 symbol=payload.get('symbol','').strip().upper()
                 if not re.fullmatch(r'[A-Z][A-Z0-9.-]{0,9}',symbol):return self.respond(400,{'error':'Invalid ticker'})

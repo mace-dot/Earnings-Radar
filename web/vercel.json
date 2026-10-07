@@ -18,6 +18,10 @@
     {
       "source": "/api/collect",
       "destination": "/api/index?route=collect"
+    },
+    {
+      "source": "/api/ideas",
+      "destination": "/api/index?route=ideas"
     }
   ],
   "headers": [

@@ -1,6 +1,6 @@
 'use strict';
 let data = {events: [], status: [], weekly: [], financial_context: {}, source_health: []};
-let view = 'brief', user = null, watchlist = [], selected = null;
+let view = 'brief', user = null, watchlist = [], selected = null, lane = 'all', ideas = [];
 const $ = s => document.querySelector(s);
 const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined) n.textContent=text; if(cls)n.className=cls; return n; };
 const date = s => { const d=new Date(s); return Number.isNaN(d.valueOf())?'Unavailable':d.toLocaleString(); };
@@ -74,11 +74,11 @@ function showCompany(symbol){
  if(!records.length)root.append(el('p','No company evidence yet. Save this stock and run collection; queued coverage is bounded.'));
 }
 function render(){
- if(selected){showCompany(selected);return;}const root=$('#board');root.hidden=false;$('#company').hidden=true;root.replaceChildren();const records=filtered();
+ renderIdeas();if(selected){showCompany(selected);return;}const root=$('#board');root.hidden=false;$('#company').hidden=true;root.replaceChildren();const records=filtered();
  if(view==='watchlist'){
   heading('Your watchlist',user?'Saved stocks feed the autonomous collector. Company coverage rotates through a bounded universe.':'Sign in to save a private watchlist. These companies have public research coverage.');
   const form=el('form',undefined,'watch-add'),input=el('input');input.placeholder='Add ticker, e.g. TSLA';input.maxLength=10;input.required=true;input.setAttribute('aria-label','Stock ticker');const button=el('button','Save stock');form.append(input,button);form.addEventListener('submit',e=>{e.preventDefault();saveStock(input.value.trim().toUpperCase());});root.append(form);
-  const symbols=user?watchlist:['AAPL','MSFT','NVDA'];for(const s of symbols)root.append(stockCard(s,Boolean(user)));if(!symbols.length)root.append(el('p','Your saved watchlist is empty. Add a stock to request backend coverage.'));
+  const symbols=user?watchlist:['AAPL','MSFT','NVDA'];for(const s of symbols){const b=(data.move_board||[]).find(x=>x.symbol===s);root.append(b?moveTile(b):stockCard(s,Boolean(user)));}if(!symbols.length)root.append(el('p','Your saved watchlist is empty. Add a stock to request backend coverage.'));
  }else if(view==='sources'){
   heading('Actual source health','Working integrations retrieve evidence. Licensed and unsupported entries are access requirements, not connected feeds.');
   for(const s of data.source_health||[]){const n=el('article',undefined,'card');n.append(el('h2',s.name),el('div',s.integration_status,'badge'),el('p',`${s.records} retained records · Last successful collection ${date(s.last_success)}`),el('p',s.capabilities||''));const age=s.last_success?(Date.now()-new Date(s.last_success))/3600000:Infinity;if(s.integration_status==='working integration'&&age>36)n.append(el('p','STALE: the last successful collection is over 36 hours old.'));list(n,'Current collection issues',s.errors);n.append(sourceLink(s.documentation_url,'Access documentation'));root.append(n);}
@@ -87,22 +87,79 @@ function render(){
   const candidates=latest(records.filter(e=>e.research?.ranking?.eligible_weekly));if(!candidates.length)root.append(el('div','No candidates meet the weekly evidence and freshness criteria. Historical research remains available in Research history.','empty'));
   for(const e of candidates.slice(0,15))root.append(card(e));
  }else if(view==='macro'){
-  heading('Macro & policy','Official developments, financing mechanisms, and conditional scenarios. Speeches are distinguished from enacted decisions.');for(const e of latest(records.filter(e=>['systemic','political'].includes(e.research?.category))).slice(0,20))root.append(card(e));
+  heading('Market weather','Watch for funding trouble and bigger price swings. Missing information means unknown, not calm.');root.append(weatherPanel());for(const e of latest(records.filter(e=>['systemic','political'].includes(e.research?.category))).slice(0,20))root.append(card(e));
  }else if(view==='history'){
   heading('Research history','Source revisions and historical analyses are retained. Realized outcomes are unavailable without point-in-time market prices; no backtest profitability is claimed.');
   for(const e of [...records].sort((a,b)=>b.published_at.localeCompare(a.published_at)).slice(0,60))root.append(card(e));
  }else{
-  heading('Today’s research brief','The highest-priority evidence available, including historical context. Expand a card to inspect facts, calculations, and what could disprove the thesis.');
-  for(const e of latest(records).slice(0,12))root.append(card(e));
+  heading(lane==='stress'?'Funding watch':lane==='volatility'?'Big-swing watch':'Your stock pick board',lane==='stress'?'Company funding questions are clues to investigate, not forecasts of a market-wide crisis.':lane==='volatility'?'Look for changing price behavior and a reason the next move could matter. A quiet stock is not automatically ready to break out.':'Pick a company. Explore an up or down case. Check the evidence before deciding what to do.');
+  let companies=(data.move_board||[]).filter(b=>!$('#search').value.trim()||`${b.symbol} ${b.name} ${b.business}`.toLowerCase().includes($('#search').value.trim().toLowerCase()));
+  if(lane==='stress'){root.append(weatherPanel());companies=companies.filter(b=>b.stress_flags?.length);}
+  if(lane==='volatility'){companies=companies.filter(b=>['Unusual daily move','Movement picking up','Quiet stretch'].includes(b.movement));if(!companies.length)root.append(el('div','We need connected price history to screen for changing volatility. Company research is available on All companies; no imminent move is inferred from headlines.','empty'));}
+  for(const b of companies)root.append(moveTile(b));
  }
- if(!root.childNodes.length)root.append(el('div','No matching research is available. Try another search or inspect Source health.','empty'));
+ $('#lanes').hidden=view!=='brief';renderIdeas();if(!root.childNodes.length)root.append(el('div',lane==='stress'?'No company funding flags are established in the available data. Market-wide crisis risk is still unknown.':'No matching company research is available. Try another search or check Data checks.','empty'));
 }
 async function loadWatchlist(){if(!user){watchlist=[];return;}const result=await api('/api/watchlist');watchlist=result.watchlist;}
-async function loadSession(){try{const s=await api('/api/session');user=s.user;if(!user){try{await api('/api/session',{action:'refresh'});user=(await api('/api/session')).user;}catch{}}await loadWatchlist();}catch{user=null;}$('#account-toggle').textContent=user?`Account: ${user.email}`:'Sign in / create account';$('#logout').hidden=!user;$('#auth-form').hidden=Boolean(user);}
+async function loadSession(){try{const s=await api('/api/session');user=s.user;if(!user){try{await api('/api/session',{action:'refresh'});user=(await api('/api/session')).user;}catch{}}await loadWatchlist();if(user)ideas=(await api('/api/ideas')).ideas.map(i=>({...i,saved:true}));}catch{user=null;}$('#account-toggle').textContent=user?`Account: ${user.email}`:'Sign in / create account';$('#logout').hidden=!user;$('#auth-form').hidden=Boolean(user);}
 async function saveStock(symbol){if(!user){$('#account').hidden=false;$('#auth-message').textContent='Sign in first to save a private backend watchlist.';$('#account').scrollIntoView();return;}try{await api('/api/watchlist',{action:'add',symbol});await loadWatchlist();$('#notice').textContent=`${symbol} saved in Supabase. It is queued for backend collection, subject to the active-universe limit.`;render();}catch(e){$('#notice').textContent=e.message;}}
-async function load(){const b=$('#refresh');b.disabled=true;try{data=await api('/api/dashboard');$('#count').textContent=data.events.length;$('#candidate-count').textContent=latest(data.events.filter(e=>e.research?.ranking?.eligible_weekly)).length;const s=data.status[0];$('#freshness').textContent=s?`Last collection ${date(s.updated_at)} · ${s.payload.collection_note||s.payload.cadence?.replaceAll('_',' ')||'Schedule not verified'}`:'Awaiting first collection';const errors=s?.payload?.jobs?.filter(j=>j.last_error)||[];$('#notice').textContent=errors.length?`${errors.length} source jobs have collection issues. See Source health.`:'';}catch(e){$('#notice').textContent=e.message;$('#freshness').textContent='Research connection unavailable';}finally{render();b.disabled=false;}}
+async function load(){const b=$('#refresh');b.disabled=true;try{data=await api('/api/dashboard');$('#count').textContent=(data.move_board||[]).length;$('#stress-count').textContent=(data.move_board||[]).filter(b=>b.stress_flags?.length).length;$('#candidate-count').textContent=latest(data.events.filter(e=>e.research?.ranking?.eligible_weekly)).length;const s=data.status[0];$('#freshness').textContent=s?`Research updated ${date(s.updated_at)} · daily updates, rotating company coverage`:'Awaiting first collection';const errors=s?.payload?.jobs?.filter(j=>j.last_error)||[];$('#notice').textContent=errors.length?`Some data feeds are unavailable. Open Data checks to see what is connected.`:'';}catch(e){$('#notice').textContent=e.message;$('#freshness').textContent='Research connection unavailable';}finally{render();b.disabled=false;}}
 async function signIn(action){const b=$('#auth-form button');b.disabled=true;try{const r=await api('/api/session',{action,email:$('#email').value.trim(),password:$('#password').value});$('#password').value='';$('#auth-message').textContent=r.confirmation_required?'Check your email to confirm the account, then sign in.':'Signed in. Your watchlist is saved privately.';await loadSession();render();}catch(e){$('#auth-message').textContent=e.message;}finally{b.disabled=false;}}
-$('#auth-form').addEventListener('submit',e=>{e.preventDefault();signIn('login');});$('#signup').addEventListener('click',()=>{if($('#auth-form').reportValidity())signIn('signup');});$('#logout').addEventListener('click',async()=>{await api('/api/session',{action:'logout'});await loadSession();render();});$('#account-toggle').addEventListener('click',()=>{$('#account').hidden=!$('#account').hidden;});
+$('#auth-form').addEventListener('submit',e=>{e.preventDefault();signIn('login');});$('#signup').addEventListener('click',()=>{if($('#auth-form').reportValidity())signIn('signup');});$('#logout').addEventListener('click',async()=>{await api('/api/session',{action:'logout'});ideas=[];await loadSession();render();});$('#account-toggle').addEventListener('click',()=>{$('#account').hidden=!$('#account').hidden;});
 document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;selected=null;document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));render();}));$('#search').addEventListener('input',()=>{selected=null;render();});$('#refresh').addEventListener('click',load);
 $('#collect').addEventListener('click',async()=>{if(!user){$('#account').hidden=false;$('#auth-message').textContent='Sign in to request a collection refresh.';return;}const b=$('#collect');b.disabled=true;$('#notice').textContent='Collecting official evidence. This can take a few minutes…';try{const result=await api('/api/collect',{});await load();$('#notice').textContent=result.status==='cooldown_or_running'?'Collection is already running or within its 15-minute cooldown.':`Collection completed: ${result.records} records retrieved. Check Source health for partial failures.`;}catch(e){$('#notice').textContent=e.message;}finally{b.disabled=false;}});
 Promise.all([load(),loadSession()]).then(render);
+
+function moveTile(b){
+ const n=el('article',undefined,'card tile'),top=el('div',undefined,'tile-head');
+ top.append(el('div',b.symbol.slice(0,1),'company-avatar'));const title=el('div');title.append(el('div',b.symbol,'tile-name'),el('div',b.name,'tile-company'));top.append(title);n.append(top);
+ const plain=b.business.replace(/\$(-?[\d,]+(?:\.\d+)?)/g,(_,v)=>compactMoney(Number(v.replaceAll(',',''))));n.append(el('div',b.business_signal,'tile-status'),el('h3','What changed','label'),el('h2',plain));
+ n.append(el('div',b.movement,'move-label'),el('p',b.movement_note,'small-copy'));
+ for(const f of b.stress_flags||[])n.append(el('div',`${f.text} Reported period: ${f.period_end}.`,'stress-flag'));
+ n.append(el('p',`Next event: ${b.catalyst||'Date not confirmed.'}`,'small-copy'));
+ const choices=el('div',undefined,'direction-buttons');
+ for(const [direction,label] of [['up','↑ Up case'],['down','↓ Down case']]){
+  const chosen=ideas.some(i=>i.symbol===b.symbol&&i.direction===direction),button=el('button',label,`${direction}${chosen?' chosen':''}`);button.setAttribute('aria-pressed',String(chosen));button.setAttribute('aria-label',`Explore ${b.symbol} ${direction} research case`);
+  button.addEventListener('click',()=>chooseIdea(b,direction));choices.append(button);
+ }
+ n.append(choices);const details=el('button','See the evidence & company details','detail-button');details.addEventListener('click',()=>showCompany(b.symbol));n.append(details);return n;
+}
+function weatherPanel(){
+ const n=el('section',undefined,'stress-overview');n.append(el('h3','Can the market get the cash it needs?'),el('p','A liquidity problem happens when cash or willing buyers become hard to find. One company’s weak finances do not prove a system-wide crisis.'));
+ const grid=el('div',undefined,'weather-grid');
+ for(const [title,text]of [['Company funding','Financial filings can reveal cash or interest-payment concerns. Check the period and the details.'],['Banks & funding markets','Unknown: current interbank funding and credit-spread series are not connected.'],['Trading conditions','Unknown: current spreads, market depth, and options pricing are not connected.']]){const box=el('div');box.append(el('strong',title),el('span',text));grid.append(box);}
+ n.append(grid,el('p','Hidden edge: not established. We need evidence that differs from documented market expectations.'));return n;
+}
+async function chooseIdea(b,direction){
+ const existing=ideas.find(i=>i.symbol===b.symbol&&i.direction===direction);
+ if(existing){if(existing.saved&&user){try{await api('/api/ideas',{action:'remove',symbol:b.symbol,direction});}catch(e){$('#idea-message').textContent=e.message;return;}}ideas=ideas.filter(i=>i!==existing);}
+ else{if(ideas.length>=20){$('#idea-message').textContent='Keep up to 20 research ideas.';return;}ideas.push({symbol:b.symbol,direction,evidence_id:b.evidence_id,saved:false});}
+ render();$('#idea-message').textContent='Your choice is a research hypothesis. It does not establish a buy signal.';
+}
+function renderIdeas(){
+ const root=$('#idea-list');root.replaceChildren();$('#lineup-mobile').hidden=!ideas.length;$('#lineup-mobile').textContent=`${ideas.length} research ${ideas.length===1?'idea':'ideas'} · View lineup`;
+ if(!ideas.length)root.append(el('p','Your lineup is empty. Try an Up or Down case on a company.','small-copy'));
+ for(const idea of ideas){const e=data.events.find(x=>x.id===idea.evidence_id),r=e?.research||{},n=el('article',undefined,'idea-entry');n.append(el('strong',`${idea.symbol} · ${idea.direction==='up'?'↑ Up / call research':'↓ Down / put research'}`));
+  n.append(el('p',(idea.direction==='up'?r.bull?.[0]:r.bear?.[0])||'Build a documented direction thesis before considering an option.'));
+  n.append(el('p',idea.saved?'Saved privately to your account':'Not saved yet'));
+  const remove=el('button','Remove');remove.addEventListener('click',()=>chooseIdea({symbol:idea.symbol,evidence_id:idea.evidence_id},idea.direction));n.append(remove);root.append(n);
+ }
+ const explanation=$('#idea-explanation');explanation.replaceChildren();if(ideas.length)explanation.append(el('div','Before buying: What event could move the stock? When? What change is already priced into the option? What would prove your idea wrong?','explanation-box'));
+}
+$('#save-ideas').addEventListener('click',async()=>{
+ if(!user){$('#account').hidden=false;$('#auth-message').textContent='Sign in to save your research lineup privately.';$('#idea-message').textContent='Sign in first. Your current ideas stay on this page.';return;}
+ const b=$('#save-ideas');b.disabled=true;try{for(const i of ideas){await api('/api/ideas',{action:'save',symbol:i.symbol,direction:i.direction,evidence_id:i.evidence_id});i.saved=true;}renderIdeas();$('#idea-message').textContent='Ideas saved to your account. No trade was placed.';}catch(e){$('#idea-message').textContent=e.message;}finally{b.disabled=false;}
+});
+document.querySelectorAll('[data-lane]').forEach(b=>b.addEventListener('click',()=>{lane=b.dataset.lane;view='brief';selected=null;document.querySelectorAll('[data-lane]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x.dataset.view==='brief'));render();}));
+$('#terms-toggle').addEventListener('click',()=>{$('#terms').hidden=!$('#terms').hidden;$('#terms-toggle').setAttribute('aria-expanded',String(!$('#terms').hidden));});
+
+function compactMoney(v){if(!Number.isFinite(v))return'Unavailable';const sign=v<0?'-':'';const n=Math.abs(v);return sign+'$'+(n>=1e9?(n/1e9).toFixed(1)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n.toLocaleString());}
+$('#option-math').addEventListener('submit',e=>{
+ e.preventDefault();try{
+  const fields=['strike','premium','quantity','target'];if(fields.some(k=>!$('#option-'+k).value.trim()))throw new Error('Enter every value from your option quote or hypothetical scenario.');
+  const input=Object.fromEntries(fields.map(k=>[k,Number($('#option-'+k).value)]));input.type=$('#option-type').value;
+  const r=optionScenario(input);$('#option-result').textContent=`Total premium paid: $${r.cost.toFixed(2)}. Maximum loss: $${r.maxLoss.toFixed(2)}. Expiration break-even: ${r.breakEven>=0?'$'+r.breakEven.toFixed(2):'not achievable at a nonnegative stock price'}. At your stock-price scenario: ${r.profitLoss>=0?'gain':'loss'} of $${Math.abs(r.profitLoss).toFixed(2)}, before fees.`;
+ }catch(error){$('#option-result').textContent=error.message;}
+});
+
+$('#lineup-mobile').addEventListener('click',()=>$('#idea-panel').scrollIntoView?.({behavior:'smooth',block:'start'}));

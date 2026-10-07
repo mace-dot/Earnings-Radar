@@ -16,7 +16,7 @@ class Store:
             raise StoreError('Database connection is not configured')
 
     def request(self, table, *, query='', rows=None, conflict='id', ignore=False, method=None):
-        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state'}:
+        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas'}:
             raise ValueError('Unknown table')
         if rows is not None:
             query = 'on_conflict=' + conflict
@@ -50,7 +50,13 @@ class Store:
         events = enrich(self.request('radar_events', query='select=*&order=published_at.desc&limit=600'))
         status = self.request('radar_status', query='select=*&id=eq.collector&limit=1')
         symbols=sorted({s for e in events for s in e.get('tickers',[])})
-        return {'events':events,'status':status,'financial_context':{s:financial_context(events,s) for s in symbols},
+        contexts={s:financial_context(events,s) for s in symbols}
+        try:
+            from ._board import company_board
+        except ImportError:
+            from _board import company_board
+        return {'events':events,'status':status,'financial_context':contexts,
+                'move_board':company_board(events,contexts,status[0]['payload'] if status else {}),
                 'weekly': [e['id'] for e in events if e['research']['ranking']['eligible_weekly']][:5],
                 'source_health': self.source_health(events,status)}
 
