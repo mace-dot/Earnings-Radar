@@ -2,10 +2,52 @@
   "framework": null,
   "buildCommand": "npm run build",
   "outputDirectory": "public",
-  "rewrites": [{"source": "/api/dashboard", "destination": "/api/index"}],
-  "headers": [{"source": "/(.*)", "headers": [
-    {"key": "X-Content-Type-Options", "value": "nosniff"},
-    {"key": "Referrer-Policy", "value": "strict-origin-when-cross-origin"},
-    {"key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"}
-  ]}]
+  "rewrites": [
+    {
+      "source": "/api/dashboard",
+      "destination": "/api/index?route=dashboard"
+    },
+    {
+      "source": "/api/session",
+      "destination": "/api/index?route=session"
+    },
+    {
+      "source": "/api/watchlist",
+      "destination": "/api/index?route=watchlist"
+    },
+    {
+      "source": "/api/collect",
+      "destination": "/api/index?route=collect"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        }
+      ]
+    }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 300
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/collect",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }

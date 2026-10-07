@@ -21,7 +21,9 @@ def record(row):
     return {'id': identity, 'provider': row['provider'], 'provider_event_id': row['provider_event_id'],
             'content_hash': row['content_hash'], 'title': row['title'], 'url': row['url'],
             'institution': row['institution'] or '', 'published_at': row['published_at'],
-            'retrieved_at': row['retrieved_at'], 'tickers': json.loads(row['tickers']), 'analysis': analysis}
+            'retrieved_at': row['retrieved_at'], 'tickers': json.loads(row['tickers']), 'analysis': analysis,
+            'evidence_meta': json.loads(row['metadata']), 'story_key': row['story_key'],
+            'provenance': row['provenance'], 'claim_type': row['claim_type'], 'backfill': bool(row['backfill'])}
 
 
 def publish(path, store=None):
