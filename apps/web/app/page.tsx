@@ -16,12 +16,24 @@ export default async function Page({
     events: Event[] = [],
     unavailable = false;
   try {
+    const today = new Date().toISOString().slice(0, 10);
+    const weekEnd = new Date(Date.now() + 7 * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const weekly = term
+      ? []
+      : await read<Event>("earnings_events", {
+          and: `(report_date.gte.${today},report_date.lte.${weekEnd})`,
+          order: "report_date.asc",
+          limit: "60",
+        });
+    const weeklySymbols = [...new Set(weekly.map((e) => e.symbol))].join(",");
     companies = await read<Security>("securities", {
       order: "symbol.asc",
       limit: "60",
       ...(term
         ? { or: `(symbol.ilike.*${term}*,name.ilike.*${term}*)` }
-        : { symbol: "in.(AAPL,MSFT,NVDA,AMZN,META,GOOGL,TSLA,JPM,XOM,SPY)" }),
+        : { ...(weeklySymbols ? { symbol: `in.(${weeklySymbols})` } : {}) }),
     });
     const symbols = companies.map((c) => c.symbol).join(",");
     if (symbols) {
@@ -31,7 +43,11 @@ export default async function Page({
           order: "as_of.desc",
           limit: "500",
         }),
-        read<Side>("line_sides", { order: "as_of.desc", limit: "1000" }),
+        read<Side>("line_sides", {
+          or: `(${companies.map((c) => `id.like.${c.symbol}:*`).join(",")})`,
+          order: "as_of.desc",
+          limit: "1000",
+        }),
         read<Event>("earnings_events", {
           symbol: `in.(${symbols})`,
           order: "report_date.asc",
@@ -42,7 +58,18 @@ export default async function Page({
       lines = rawLines
         .filter((l) => {
           const key = `${l.symbol}:${l.kind}`;
-          if (seen.has(key)) return false;
+          if (
+            ![
+              "Swing",
+              "Run-Up",
+              "Earnings Move",
+              "Direction",
+              "IV Ramp",
+              "Drift",
+            ].includes(l.kind) ||
+            seen.has(key)
+          )
+            return false;
           seen.add(key);
           return true;
         })
@@ -71,7 +98,7 @@ export default async function Page({
           </p>
         </div>
         <div className="panel">
-          <strong>Five ways to study a move</strong>
+          <strong>Reporting this week · automatic calendar coverage</strong>
           <p className="muted">
             Before earnings · Earnings reaction · After earnings
             <br />

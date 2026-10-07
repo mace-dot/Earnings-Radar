@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
+import { RequestScore } from "@/components/request-score";
 import { Button } from "@/components/ui/button";
 import type { Security, Line, Side, Event } from "@/lib/types";
 export function Board({
@@ -26,14 +27,24 @@ export function Board({
     (c) => sector === "All sectors" || c.sector === sector,
   );
   const sectors = [...new Set(companies.map((c) => c.sector))].sort();
-  function open(company: Security, sideName: "BULL" | "BEAR", line?: Line) {
+  function open(company: Security, sideName: Side["side"], line?: Line) {
     const chosen =
       line ??
       lines.find((l) => l.symbol === company.symbol && l.kind === "Swing");
     setSelected({
       company,
       line: chosen,
-      side: chosen?.sides.find((s) => s.side === sideName),
+      side: chosen?.sides.find(
+        (s) =>
+          s.side ===
+          (chosen.kind === "Earnings Move" || chosen.kind === "IV Ramp"
+            ? sideName === "BEAR" || sideName === "LESS"
+              ? "LESS"
+              : "MORE"
+            : sideName === "LESS" || sideName === "BEAR"
+              ? "BEAR"
+              : "BULL"),
+      ),
     });
   }
   return (
@@ -56,7 +67,15 @@ export function Board({
       </div>
       <div className="grid">
         {visible.map((c) => {
-          const event = events.find((e) => e.symbol === c.symbol);
+          const event =
+            events.find(
+              (e) =>
+                e.symbol === c.symbol &&
+                e.report_date >= new Date().toISOString().slice(0, 10),
+            ) ??
+            events
+              .filter((e) => e.symbol === c.symbol)
+              .sort((a, b) => b.report_date.localeCompare(a.report_date))[0];
           const stockLines = lines.filter((l) => l.symbol === c.symbol);
           return (
             <article className="card" key={c.symbol}>
@@ -70,16 +89,32 @@ export function Board({
               </div>
               <p>{c.name}</p>
               <p className="muted">{c.sector}</p>
+              {stockLines.find((l) => l.kind === "Swing")?.payload.metrics
+                ?.vol_compression_ratio != null && (
+                <p>
+                  Volatility ratio{" "}
+                  <strong>
+                    {stockLines
+                      .find((l) => l.kind === "Swing")
+                      ?.payload.metrics?.vol_compression_ratio?.toFixed(2)}
+                    ×
+                  </strong>
+                  <br />
+                  <small>
+                    Alpaca IEX · 10 vs. 60 sessions · not a move probability
+                  </small>
+                </p>
+              )}
               <div className="badges">
                 <span className="pill">
                   {event
                     ? `${event.report_date} · ${event.date_status}`
-                    : "Report date not connected"}
+                    : "Calendar date unavailable"}
                 </span>
                 <span className="pill">
                   {stockLines.length
                     ? "Price research ready"
-                    : "Research pending"}
+                    : "Open to request research"}
                 </span>
               </div>
               <p className="muted">
@@ -181,6 +216,22 @@ export function Board({
             {selected?.side ? (
               <>
                 <p>{selected.line?.payload.subtitle}</p>
+                <div className="sides">
+                  {selected.line?.sides.map((side) => (
+                    <Button
+                      key={side.id}
+                      className={
+                        side.side === "BULL" || side.side === "MORE"
+                          ? "bull"
+                          : "bear"
+                      }
+                      onClick={() => setSelected({ ...selected, side })}
+                    >
+                      {side.side}
+                    </Button>
+                  ))}
+                </div>
+
                 <div className="badges">
                   {selected.side.payload.badges.map((b) => (
                     <span className="pill" key={b}>
@@ -215,6 +266,43 @@ export function Board({
                         ? `$${Number(selected.side.payload.trade.stop).toFixed(2)}`
                         : "not available"}
                     </p>
+                  )}
+                  {selected.side.payload.trade.estimate && (
+                    <>
+                      <p>
+                        Strike $
+                        {selected.side.payload.trade.estimate.strike.toFixed(2)}{" "}
+                        · expiry {selected.side.payload.trade.estimate.expiry}
+                      </p>
+                      <p>
+                        Estimated paired debit $
+                        {selected.side.payload.trade.estimate.debit_per_share.toFixed(
+                          2,
+                        )}{" "}
+                        per share · one assumed standard pair $
+                        {selected.side.payload.trade.estimate.estimated_one_standard_contract_cost.toFixed(
+                          2,
+                        )}
+                      </p>
+                      <p>
+                        Expiry breakevens: $
+                        {selected.side.payload.trade.estimate.lower_breakeven.toFixed(
+                          2,
+                        )}{" "}
+                        / $
+                        {selected.side.payload.trade.estimate.upper_breakeven.toFixed(
+                          2,
+                        )}
+                      </p>
+                      <small>
+                        {selected.side.payload.trade.estimate.quote_kind}.{" "}
+                        {
+                          selected.side.payload.trade.estimate
+                            .multiplier_assumption
+                        }
+                        . A pre-expiry exit has different economics.
+                      </small>
+                    </>
                   )}
                   <p>{selected.side.payload.trade.exit}</p>
                   {selected.side.payload.trade.missing.map((m) => (
@@ -257,8 +345,7 @@ export function Board({
               </>
             ) : (
               <div className="notice">
-                This company is searchable. Its price and event research have
-                not been collected yet; there is no generated trade to show.
+                {selected && <RequestScore symbol={selected.company.symbol} />}
               </div>
             )}
             <p>

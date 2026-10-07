@@ -3,6 +3,13 @@ import { notFound } from "next/navigation";
 import { read } from "@/lib/db";
 import type { Security, Bar, Event, Line, Side } from "@/lib/types";
 import { PriceChart } from "@/components/chart";
+import { RequestScore } from "@/components/request-score";
+import {
+  Context,
+  type Market,
+  type News,
+  type Forum,
+} from "@/components/context";
 import { Board } from "@/components/board";
 export default async function Stock({
   params,
@@ -18,28 +25,62 @@ export default async function Stock({
   });
   if (!companies.length) notFound();
   const company = companies[0];
-  const [bars, events, rawLines, sides] = await Promise.all([
-    read<Bar>("daily_bars", {
-      symbol: `eq.${symbol}`,
-      order: "session_date.desc",
-      limit: "252",
-    }),
-    read<Event>("earnings_events", {
-      symbol: `eq.${symbol}`,
-      order: "report_date.desc",
-      limit: "12",
-    }),
-    read<Line>("lines", {
-      symbol: `eq.${symbol}`,
-      order: "as_of.desc",
-      limit: "5",
-    }),
-    read<Side>("line_sides", { order: "as_of.desc", limit: "1000" }),
-  ]);
-  const lines = rawLines.map((l) => ({
-    ...l,
-    sides: sides.filter((s) => s.id.startsWith(`${l.id}:`)),
-  }));
+  const [bars, events, rawLines, sides, market, news, forums] =
+    await Promise.all([
+      read<Bar>("daily_bars", {
+        symbol: `eq.${symbol}`,
+        order: "session_date.desc",
+        limit: "252",
+      }),
+      read<Event>("earnings_events", {
+        symbol: `eq.${symbol}`,
+        order: "report_date.desc",
+        limit: "12",
+      }),
+      read<Line>("lines", {
+        symbol: `eq.${symbol}`,
+        order: "as_of.desc",
+        limit: "20",
+      }),
+      read<Side>("line_sides", {
+        id: `like.${symbol}:*`,
+        order: "as_of.desc",
+        limit: "1000",
+      }),
+      read<Market>("market_observations", {
+        symbol: `eq.${symbol}`,
+        order: "retrieved_at.desc",
+        limit: "1",
+      }),
+      read<News>("news_items", {
+        symbol: `eq.${symbol}`,
+        order: "published_at.desc",
+        limit: "12",
+      }),
+      read<Forum>("forum_posts", {
+        symbol: `eq.${symbol}`,
+        order: "published_at.desc",
+        limit: "30",
+      }),
+    ]);
+  const seen = new Set<string>();
+  const lines = rawLines
+    .filter((l) => {
+      if (seen.has(l.kind)) return false;
+      seen.add(l.kind);
+      return [
+        "Swing",
+        "Run-Up",
+        "Earnings Move",
+        "Direction",
+        "IV Ramp",
+        "Drift",
+      ].includes(l.kind);
+    })
+    .map((l) => ({
+      ...l,
+      sides: sides.filter((s) => s.id.startsWith(`${l.id}:`)),
+    }));
   return (
     <>
       <Link href="/">← Board</Link>
@@ -78,6 +119,12 @@ export default async function Stock({
           )}
         </section>
       </div>
+      {(!lines.length ||
+        !market.length ||
+        Date.now() - Date.parse(market[0].retrieved_at) > 1800000) && (
+        <RequestScore symbol={symbol} />
+      )}
+      <Context symbol={symbol} market={market} news={news} forums={forums} />
       <h2>Explore a case</h2>
       <Board companies={companies} lines={lines} events={events} />
       <section className="panel">

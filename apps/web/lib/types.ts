@@ -31,10 +31,21 @@ export type Trade = {
   max_loss: number | null;
   exit: string;
   missing: string[];
+  estimate?: {
+    strike: number;
+    expiry: string;
+    debit_per_share: number;
+    estimated_one_standard_contract_cost: number;
+    lower_breakeven: number;
+    upper_breakeven: number;
+    multiplier_assumption: string;
+    quote_kind: string;
+    event_specific: boolean;
+  } | null;
 };
 export type Side = {
   id: string;
-  side: "BULL" | "BEAR";
+  side: "BULL" | "BEAR" | "MORE" | "LESS";
   as_of: string;
   payload: {
     tier: string;
@@ -53,7 +64,20 @@ export type Line = {
   symbol: string;
   kind: string;
   as_of: string;
-  payload: { subtitle: string; favored: string | null; badges: string[] };
+  payload: {
+    subtitle: string;
+    favored: string | null;
+    badges: string[];
+    metrics?: {
+      rv_10: number | null;
+      rv_60: number | null;
+      vol_compression_ratio: number | null;
+      bb_width_percentile: number | null;
+      move_meter: number | null;
+    };
+    option_estimate?: { implied_move: number | null } | null;
+    source?: string;
+  };
   sides: Side[];
 };
 export type Pick = {

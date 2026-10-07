@@ -21,6 +21,7 @@ export default function Layout({
           </Link>
           <nav aria-label="Main navigation">
             <Link href="/">Board</Link>
+            <Link href="/moves">Move screen</Link>
             <Link href="/picks">Picks</Link>
             <Link href="/track-record">Track record</Link>
             <Link href="/learn">Learn</Link>
