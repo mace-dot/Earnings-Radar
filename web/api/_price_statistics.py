@@ -28,12 +28,12 @@ def summarize(bars, benchmark=()):
         # Validate benchmark independently, without recursively comparing to another series.
         check = summarize(benchmark)
         if check['status'] == 'available':
-            br = {datetime.fromisoformat(b['t'].replace('Z','+00:00')).astimezone(timezone.utc).date().isoformat(): math.log(float(b['c'])/float(a['c'])) for a,b in zip(benchmark, benchmark[1:])}
-            pairs = [(r[i-1], br[d]) for i,d in enumerate(dates) if i and d in br][-60:]
+            br = {datetime.fromisoformat(b['t'].replace('Z','+00:00')).astimezone(timezone.utc).date().isoformat(): (datetime.fromisoformat(a['t'].replace('Z','+00:00')).astimezone(timezone.utc).date().isoformat(),math.log(float(b['c'])/float(a['c']))) for a,b in zip(benchmark, benchmark[1:])}
+            pairs = [(r[i-1], br[d][1]) for i,d in enumerate(dates) if i and d in br and br[d][0]==dates[i-1]][-60:]
             if len(pairs) >= 40:
                 x,y = zip(*pairs); variance = statistics.variance(y)
                 beta = statistics.covariance(x,y)/variance if variance else None
-            if dates[-1] in br: relative = r[-1] - br[dates[-1]]
+            if dates[-1] in br and br[dates[-1]][0]==dates[-2]: relative = r[-1] - br[dates[-1]][1]
     ratio = sigma20 / sigma60 if sigma60 else None
     flags = []
     if ratio is not None and ratio < .7: flags.append('Volatility compression: recent daily variation is below its 60-session baseline; direction and timing are unknown.')

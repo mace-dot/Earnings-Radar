@@ -46,6 +46,22 @@
     {
       "source": "/api/strategy",
       "destination": "/api/index?route=strategy"
+    },
+    {
+      "source": "/api/quote",
+      "destination": "/api/index?route=quote"
+    },
+    {
+      "source": "/api/options",
+      "destination": "/api/index?route=options"
+    },
+    {
+      "source": "/api/capabilities",
+      "destination": "/api/index?route=capabilities"
+    },
+    {
+      "source": "/api/diagnostics",
+      "destination": "/api/index?route=diagnostics"
     }
   ],
   "headers": [
@@ -69,7 +85,8 @@
   ],
   "functions": {
     "api/index.py": {
-      "maxDuration": 300
+      "maxDuration": 300,
+      "includeFiles": "api/research_policy.json"
     }
   },
   "crons": [

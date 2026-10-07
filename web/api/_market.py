@@ -55,6 +55,7 @@ def history(store,symbol):
  row=rows[0] if rows else {};payload=row.get('payload',{})
  configured=bool(os.getenv('ALPACA_API_KEY') and os.getenv('ALPACA_API_SECRET'))
  display=os.getenv('RADAR_MARKET_DISPLAY_AUTHORIZED','false').lower()=='true'
+ if not display:payload={}
  if not payload.get('bars'):return {'status':'not_configured' if not configured else 'authorization_required' if not display else 'unavailable','bars':[],
    'reason':('Alpaca keys are connected. Public price display awaits confirmation of the provider display entitlement.' if configured and not display else row.get('last_error') or 'Connect ALPACA_API_KEY and ALPACA_API_SECRET in Vercel server environment settings for authorized daily stock history.'),
    'news_status':row.get('news_status',[]),'statistics':{'status':'unavailable'},'required_credentials':['ALPACA_API_KEY','ALPACA_API_SECRET']}
@@ -65,9 +66,23 @@ def history(store,symbol):
 
 def refresh(store,symbol):
  if not os.getenv('ALPACA_API_KEY') or not os.getenv('ALPACA_API_SECRET'):return history(store,symbol)
+ if os.getenv('RADAR_MARKET_DISPLAY_AUTHORIZED','false').lower()!='true':return history(store,symbol)
  if not store.rpc('radar_claim_market',{'p_symbol':symbol}):return history(store,symbol)
  try:
   payload=collect_alpaca(symbol)
+  if symbol!='SPY':
+   try:
+    key='history:SPY'
+    if store.rpc('radar_claim_data',{'p_key':key,'p_seconds':43200}):
+     benchmark=collect_alpaca('SPY')
+     store.request('radar_data_cache',query='id=eq.'+key,rows={'payload':benchmark,'last_error':None},method='PATCH')
+    cached=store.request('radar_data_cache',query='select=payload&id=eq.'+key+'&limit=1')
+    benchmark=cached[0]['payload'] if cached else {}
+    age=(datetime.now(timezone.utc)-datetime.fromisoformat(benchmark['retrieved_at'])).total_seconds() if benchmark.get('retrieved_at') else float('inf')
+    if age<=36*3600 and benchmark.get('feed')==payload['feed'] and benchmark.get('adjustment')==payload['adjustment']:
+     payload['statistics']=summarize(payload['bars'],benchmark.get('bars',[]))
+     payload['benchmark_context']={'symbol':'SPY','feed':benchmark['feed'],'retrieved_at':benchmark['retrieved_at']}
+   except Exception:payload['benchmark_status']='unavailable; stock-only statistics preserved'
   store.request('radar_market_cache',query='symbol=eq.'+symbol,rows={'payload':payload,'updated_at':payload['retrieved_at'],'last_error':None,'lease_until':None},method='PATCH')
  except MarketError as exc:
   store.request('radar_market_cache',query='symbol=eq.'+symbol,rows={'last_error':str(exc),'lease_until':None},method='PATCH')

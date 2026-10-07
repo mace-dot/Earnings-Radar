@@ -15,6 +15,9 @@ from _collector import run,resolve_symbol,CollectionError
 from _directory import search as directory_search
 from _orchestrator import company,request_research,background
 from _assistant import answer as company_answer
+from _live import live_quote,capabilities,provider_get,enabled as market_enabled
+from _options_research import research as option_research
+from _policy import POLICY
 
 class handler(BaseHTTPRequestHandler):
     def respond(self,status,payload,cookies=()):
@@ -30,9 +33,24 @@ class handler(BaseHTTPRequestHandler):
             params=parse_qs(urlsplit(self.path).query)
             if path=='/api/directory':return self.respond(200,{'companies':directory_search(store,params.get('q',[''])[0])})
             if path=='/api/company':return self.respond(200,company(store,params.get('symbol',[''])[0].upper()))
+            if path=='/api/capabilities':return self.respond(200,{**capabilities(store),'policy':POLICY})
+            if path=='/api/quote':return self.respond(200,live_quote(store,params.get('symbol',[''])[0].upper()))
+            if path=='/api/options':return self.respond(200,option_research(store,params.get('symbol',[''])[0].upper()))
+            if path=='/api/diagnostics':
+                secret=os.getenv('CRON_SECRET','')
+                if not secret or not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+secret):return self.respond(401,{'error':'Administrator authorization required'})
+                status=capabilities(store)
+                try:
+                    bars=provider_get('/v2/stocks/AAPL/bars',{'timeframe':'1Day','limit':2,'feed':'iex'})
+                    status['price_probe']={'authenticated':True,'received_bar_count':len(bars.get('bars',[]))}
+                except Exception:status['price_probe']={'authenticated':False,'reason':'Provider probe failed'}
+                return self.respond(200,status)
             if path=='/api/track-record':
                 rows=store.request('radar_research_snapshots',query='select=*&order=created_at.desc&limit=50')
-                return self.respond(200,{'snapshots':rows,'forecast_status':'No validated predictive model has issued forecasts; outcomes require market prices.'})
+                evaluations=store.request('radar_evaluations',query='select=*&order=created_at.desc&limit=50') if market_enabled() else []
+                if not market_enabled():
+                    rows=[{**r,'payload':{k:r['payload'][k] for k in ('as_of','action','state','source_ids') if k in r['payload']}} for r in rows]
+                return self.respond(200,{'snapshots':rows,'evaluations':evaluations,'forecast_status':'No validated predictive model has issued forecasts; outcomes require market prices.'})
             if path in ('/api/dashboard','/api/index','/api/index.py'):return self.respond(200,store.dashboard())
             if path=='/api/session':
                 try:user=current_user(store,self.headers.get('Cookie'));return self.respond(200,{'user':{'id':user['id'],'email':user.get('email')}})

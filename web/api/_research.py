@@ -7,6 +7,8 @@ LABELS = {'RevenueFromContractWithCustomerExcludingAssessedTax':'Revenue','Reven
  'NetCashProvidedByUsedInOperatingActivities':'Operating cash flow','PaymentsToAcquirePropertyPlantAndEquipment':'Capital expenditure',
  'Assets':'Assets','Liabilities':'Liabilities','StockholdersEquity':'Shareholders’ equity','InterestExpense':'Interest expense'}
 
+LABELS.update({'Revenues': 'Revenue', 'SalesRevenueNet': 'Revenue', 'AssetsCurrent': 'Short-term assets', 'LiabilitiesCurrent': 'Short-term obligations', 'CashAndCashEquivalentsAtCarryingValue': 'Cash and cash equivalents', 'LongTermDebtCurrent': 'Long-term debt due within a year', 'LongTermDebtNoncurrent': 'Long-term debt due later', 'ShortTermBorrowings': 'Short-term borrowings', 'StockBasedCompensation': 'Stock-based compensation', 'CommonStockSharesOutstanding': 'Common shares outstanding', 'StockholdersEquity': 'Shareholders’ equity'})
+
 def stamp(s):
     try:
         d=datetime.fromisoformat(s.replace('Z','+00:00'))
@@ -45,7 +47,7 @@ def interpretation(e,events,now=None):
       'missing':list(dict.fromkeys(a.get('missing_information',[])+['Documented consensus expectations','Verified valuation and executable market data'])),
       'category':a.get('category','general'),'confidence':'Primary-source support; investment implications remain hypotheses.'}
     if tag and isinstance(value,(float,int)) and math.isfinite(value):
-        result['takeaway']=f"{label} was ${value:,.0f} for the reported period ending {m.get('end','unknown')}."
+        result['takeaway']=f"{label} was {'$' if m.get('units')=='USD' else ''}{value:,.0f} for the reported period ending {m.get('end','unknown')}."
         prior=comparables(e,events)
         if prior and prior['evidence_meta'].get('value'):
             pv=prior['evidence_meta']['value']; pct=(value-pv)/abs(pv)*100
@@ -116,6 +118,14 @@ def enrich(events,now=None):
     for e in events:e['research']=interpretation(e,events,now)
     return sorted(events,key=lambda e:(e['research']['ranking']['score'],e.get('published_at','')),reverse=True)
 
+def sector_context(events):
+    code=next((e.get('evidence_meta',{}).get('sic') for e in events if e.get('evidence_meta',{}).get('sic')),None)
+    try:n=int(code)
+    except (TypeError,ValueError):n=None
+    kind='bank' if n and 6000<=n<6200 else 'insurer' if n and 6300<=n<6500 else 'reit' if n==6798 else 'general' if n else 'unclassified'
+    return {'sic':code,'kind':kind,'generic_funding_ratios_applicable':kind not in ('bank','insurer','reit'),
+      'note':'Sector-specific capital, funding and obligation analysis is required; generic liquidity ratios are suppressed.' if kind in ('bank','insurer','reit') else 'Industry classification is unverified; generic ratios are historical context only.' if kind=='unclassified' else 'General-company ratios need debt maturity and funding context.'}
+
 def financial_context(events,symbol):
     facts=[e for e in events if symbol in e.get('tickers',[]) and e.get('evidence_meta',{}).get('tag')]
     groups={}
@@ -123,6 +133,7 @@ def financial_context(events,symbol):
         m=e['evidence_meta'];key=(m.get('start'),m.get('end'),m.get('units'));g=groups.setdefault(key,{})
         tag=m['tag']
         if tag not in g or e['published_at']>g[tag]['published_at']:g[tag]=e
+    sector=sector_context(facts)
     output=[]
     for period,g in sorted(groups.items(),key=lambda x:x[0][1] or '',reverse=True):
         revenue=next((g[t] for t in ('RevenueFromContractWithCustomerExcludingAssessedTax','Revenues','SalesRevenueNet') if t in g),None)
@@ -136,7 +147,8 @@ def financial_context(events,symbol):
             a=g['NetCashProvidedByUsedInOperatingActivities'];b=g['PaymentsToAcquirePropertyPlantAndEquipment']
             output.append({'label':'Free cash flow proxy','value':a['evidence_meta']['value']-b['evidence_meta']['value'],'period_end':period[1],
                            'evidence_ids':[a['id'],b['id']],'unit':'USD','limitation':'Operating cash flow less reported property/plant/equipment purchases; not all forms of investment.'})
-        ratio('Interest coverage',g.get('OperatingIncomeLoss'),g.get('InterestExpense'))
-        ratio('Current ratio',g.get('AssetsCurrent'),g.get('LiabilitiesCurrent'))
-        ratio('Liabilities / assets',g.get('Liabilities'),g.get('Assets'),100)
+        if sector['generic_funding_ratios_applicable']:
+            ratio('Interest coverage',g.get('OperatingIncomeLoss'),g.get('InterestExpense'))
+            ratio('Current ratio',g.get('AssetsCurrent'),g.get('LiabilitiesCurrent'))
+            ratio('Liabilities / assets',g.get('Liabilities'),g.get('Assets'),100)
     return output[:30]

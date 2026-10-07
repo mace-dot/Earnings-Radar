@@ -92,3 +92,11 @@ assert.equal(vm.runInNewContext("marketChartSymbol({symbol:'BRK-B',exchange:'NYS
 assert.throws(()=>vm.runInNewContext("marketChartSymbol({symbol:'AAPL&steal=1'})",sandbox));
 const providerFrame=document.querySelector('.market-chart-frame');assert.ok(providerFrame);assert.match(providerFrame.src,/^https:\/\/s\.tradingview\.com\/widgetembed\//);assert.match(providerFrame.title,/interactive price chart/);
 console.log('Hosted chart smoke passed: provider URL, exchange mapping, attribution and symbol validation');
+
+sandbox.workflowFixture={research_decision:{as_of:'2026-10-07T16:00:00Z',source_count:2,state:'WATCH',summary:'Business research is available; option pricing remains separate.',next_checks:['Confirm the next event.'],playbooks:[{name:'Trend continuation',state:'DATA_BLOCKED',reason:'History missing.'}],roles:[{role:'risk',status:'complete',finding:'No unsupported contract.'}],claims:[{text:'Reported cash improved.',url:'https://www.sec.gov/test'}]},changes:{summary:'One new primary disclosure.'},sector_context:{note:'Bank-specific analysis required.'}};
+vm.runInNewContext("appendWorkflow(document.querySelector('#company'),workflowFixture)",sandbox);
+assert.match(document.querySelector('#company').textContent,/The business, the timing, the option/);
+assert.match(document.querySelector('#company').textContent,/One new primary disclosure/);
+assert.match(document.querySelector('#company').textContent,/Bank-specific analysis/);
+assert.match(document.querySelector('#company').textContent,/Research checks and original evidence/);
+console.log('Workflow UI smoke passed: separate verdicts, change brief, sector context and cited passages');

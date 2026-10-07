@@ -178,15 +178,33 @@ See [implementation status](docs/IMPLEMENTATION_STATUS.md),
 backups, deployment templates, model budget and notification configuration.
 
 
-## Hosted URL through Render
+## Current hosted application
 
-A GitHub-connected Render Blueprint is prepared in `render.yaml`. It uses Python 3.12,
-runs the dashboard and collector together, retains SQLite on a persistent disk, and
-requires a generated dashboard password. In Render choose **New → Blueprint**, select
-this repository and branch **feature/autonomous-earnings-research**, enter the requested
-SEC User-Agent, and review the Starter service/disk costs before creation. Main remains
-the older app. Deployment has not been performed from this session.
+The active web application is [Earnings Radar on Vercel](https://earnings-radar-two.vercel.app/).
+Vercel deploys GitHub `main` from the `web` directory; Supabase stores research,
+private watchlists and immutable decisions. The Streamlit app remains a separate local interface.
 
-See [hosting setup](docs/HOSTING.md) for account connection, access and validation.
-Vercel is not a direct host for this Streamlit/continuous-worker architecture; Supabase
-is an optional future database/auth component rather than an app host.
+The autonomous research release adds structured analyst checks, separate business/timing/option
+verdicts, source-backed change briefs, SEC companyfacts batching and sector-specific context,
+bounded quote/options adapters, capability diagnostics and point-in-time underlying monitoring.
+See [current implementation status](docs/autonomous-research/implementation-status.md) and
+[architecture](docs/autonomous-research/blueprint.md). The user-supplied decision contract is
+`web/api/research_policy.json`; its thresholds remain proposed and forecasts are disabled.
+
+Run validation with the supported Python environment and `PYTHONPATH=.`:
+
+```bash
+python -m pytest -q
+cd web
+npm ci
+npm run build
+```
+
+Apply Supabase migrations in order before deploying a backend requiring new tables. Keep
+server credentials in server environment settings. Provider authentication is separate from
+public data-use entitlement. Hosted charts are visual and do not feed backend models.
+This configuration uses bounded on-demand requests plus daily Vercel research scheduling;
+it is not an always-on consolidated stock/options stream. No paid service, brokerage execution
+or external notifications are activated.
+
+Earlier Render/Streamlit hosting documentation is retained for historical reference.

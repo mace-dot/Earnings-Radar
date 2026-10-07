@@ -16,7 +16,7 @@ class Store:
             raise StoreError('Database connection is not configured')
 
     def request(self, table, *, query='', rows=None, conflict='id', ignore=False, method=None):
-        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas', 'radar_universe', 'radar_research_queue', 'radar_research_snapshots', 'radar_model_cache', 'radar_market_cache'}:
+        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas', 'radar_universe', 'radar_research_queue', 'radar_research_snapshots', 'radar_model_cache', 'radar_market_cache', 'radar_data_cache', 'radar_evaluations','radar_model_registry'}:
             raise ValueError('Unknown table')
         if rows is not None:
             if method not in ('PATCH',):query = 'on_conflict=' + conflict
@@ -64,19 +64,21 @@ class Store:
         except ImportError:
             from _board import company_board
         caches=self.request('radar_market_cache',query='select=symbol,payload&limit=1000')
-        available={c['symbol']:c['payload'].get('statistics',{}) for c in caches}
+        authorized=os.getenv('RADAR_MARKET_DISPLAY_AUTHORIZED','false').lower()=='true'
+        available={c['symbol']:c['payload'].get('statistics',{}) for c in caches} if authorized else {}
         state['quantitative']={s:available.get(s,{}) for s in symbols}
         boards=company_board(events,contexts,state)
-        for b in boards:
-            directory=self.request('radar_universe',query='select=name&symbol=eq.'+b['symbol']+'&limit=1')
-            if directory:b['name']=directory[0]['name']
+        if boards:
+            names=self.request('radar_universe',query='select=symbol,name&symbol=in.('+','.join(b['symbol'] for b in boards)+')')
+            by_symbol={r['symbol']:r['name'] for r in names}
+            for b in boards:b['name']=by_symbol.get(b['symbol'],b['name'])
         return {'events':events,'status':status,'financial_context':contexts,
                 'move_board':boards,
                 'weekly': [e['id'] for e in events if e['research']['ranking']['eligible_weekly']][:5],
                 'source_health': self.source_health(events,status)}
 
     def rpc(self, name, payload):
-        if name not in {'radar_claim_collection','radar_enqueue','radar_claim_research','radar_finish_research','radar_reserve_model_call','radar_search_directory','radar_claim_market','radar_claim_news'}: raise ValueError('Unknown RPC')
+        if name not in {'radar_claim_collection','radar_enqueue','radar_claim_research','radar_finish_research','radar_reserve_model_call','radar_search_directory','radar_claim_market','radar_claim_news','radar_claim_data','radar_commit_research'}: raise ValueError('Unknown RPC')
         headers={'apikey':self.key,'Content-Type':'application/json'}
         if not self.key.startswith('sb_secret_'):headers['Authorization']='Bearer '+self.key
         try:

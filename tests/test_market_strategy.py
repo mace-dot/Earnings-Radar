@@ -72,6 +72,7 @@ def test_missing_credentials_never_fabricate_or_refresh_prices(monkeypatch):
  r=refresh(Store(),'AAPL');assert r['status']=='not_configured' and r['bars']==[]
 
 def test_provider_failure_does_not_replace_usable_cache(monkeypatch):
+ monkeypatch.setenv('RADAR_MARKET_DISPLAY_AUTHORIZED','true')
  import web.api._market as market
  monkeypatch.setenv('ALPACA_API_KEY','fixture-key');monkeypatch.setenv('ALPACA_API_SECRET','fixture-secret')
  def fail(symbol):raise market.MarketError('Provider unavailable')

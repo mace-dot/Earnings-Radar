@@ -5,7 +5,7 @@ const $ = s => document.querySelector(s);
 const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined) n.textContent=text; if(cls)n.className=cls; return n; };
 const evidenceUrl=e=>e.readable_url||e.url;
 const evidenceTitle=e=>e.display_title||e.title;
-let companyDetails={},directoryCompanies={},strategyRequests=new Map();
+let companyDetails={},directoryCompanies={},strategyRequests=new Map(),companyRequestVersion=0;
 const date = s => { const d=new Date(s); return Number.isNaN(d.valueOf())?'Unavailable':d.toLocaleString(); };
 const pct = v => typeof v==='number'&&Number.isFinite(v)?`${v.toFixed(1)}%`:'Unavailable';
 function sourceLink(url,label){
@@ -67,8 +67,11 @@ function showCompany(symbol,ready=false){
  if(!ready){openResearch(symbol);return;}
  selected=symbol;$('#board').hidden=true;$('#company').hidden=false;const root=$('#company');root.replaceChildren();
  const back=el('button','← Back to board');back.addEventListener('click',()=>{selected=null;render();});root.append(back,el('h2',`${symbol} · Research dossier`));
+ appendWorkflow(root,companyDetails[symbol]);
  mountMarketChart(root,companyDetails[symbol]?.company||directoryCompanies[symbol]||{symbol});
  appendPriceHistory(root,companyDetails[symbol]?.price_history);
+ appendLiveQuote(root,symbol);
+ appendOptionResearch(root,symbol);
  appendAssistant(root,symbol);
  const newsHealth=companyDetails[symbol]?.price_history?.news_status||[];
  for(const feed of newsHealth)root.append(el('p',`Company news feed: ${feed.name} · ${feed.status}${feed.last_error?' · '+feed.last_error:''}`));
@@ -90,7 +93,7 @@ function render(){
  if(view==='watchlist'){
   heading('Your watchlist',user?'Saved stocks feed the autonomous collector. Company coverage rotates through a bounded universe.':'Sign in to save a private watchlist. These companies have public research coverage.');
   const form=el('form',undefined,'watch-add'),input=el('input');input.placeholder='Add ticker, e.g. TSLA';input.maxLength=10;input.required=true;input.setAttribute('aria-label','Stock ticker');const button=el('button','Save stock');form.append(input,button);form.addEventListener('submit',e=>{e.preventDefault();saveStock(input.value.trim().toUpperCase());});root.append(form);
-  const symbols=user?watchlist:(data.move_board||[]).map(b=>b.symbol);for(const s of symbols){const b=(data.move_board||[]).find(x=>x.symbol===s);root.append(b?moveTile(b):stockCard(s,Boolean(user)));}if(!symbols.length)root.append(el('p','Your saved watchlist is empty. Add a stock to request backend coverage.'));
+  const symbols=user?watchlist:(data.move_board||[]).map(b=>b.symbol);for(const s of symbols){const b=(data.move_board||[]).find(x=>x.symbol===s);root.append(b?moveTile(b):stockCard(s,Boolean(user)));}if(!symbols.length)root.append(el('p','Your personal watchlist is empty. The automatic research board works independently—open Today to explore researched companies.'));
  }else if(view==='discover'){
  heading('Discover companies','The scanner finds recent official disclosures automatically. Filing activity is a research lead, not a predicted price move.');
  const scan=data.status[0]?.payload?.discovery;
@@ -101,6 +104,7 @@ function render(){
  loadTrack(root);
  }else if(view==='sources'){
   heading('Actual source health','Working integrations retrieve evidence. Licensed and unsupported entries are access requirements, not connected feeds.');
+  appendCapabilities(root);
   for(const s of data.source_health||[]){const n=el('article',undefined,'card');n.append(el('h2',s.name),el('div',s.integration_status,'badge'),el('p',`${s.records} retained records · Last successful collection ${date(s.last_success)}`),el('p',s.capabilities||''));const age=s.last_success?(Date.now()-new Date(s.last_success))/3600000:Infinity;if(s.integration_status==='working integration'&&age>36)n.append(el('p','STALE: the last successful collection is over 36 hours old.'));list(n,'Current collection issues',s.errors);n.append(sourceLink(s.documentation_url,'Access documentation'));root.append(n);}
  }else if(view==='opportunities'){
   heading('Opportunity research board','Ranked evidence to investigate—not buy recommendations. Scores expose source support, freshness, comparisons, and missing context.');
@@ -112,7 +116,7 @@ function render(){
   heading('Research history','Source revisions and historical analyses are retained. Realized outcomes are unavailable without point-in-time market prices; no backtest profitability is claimed.');
   for(const e of [...records].sort((a,b)=>b.published_at.localeCompare(a.published_at)).slice(0,60))root.append(card(e));
  }else{
-  heading(lane==='stress'?'Funding watch':lane==='volatility'?'Big-swing watch':'Your stock pick board',lane==='stress'?'Company funding questions are clues to investigate, not forecasts of a market-wide crisis.':lane==='volatility'?'Look for changing price behavior and a reason the next move could matter. A quiet stock is not automatically ready to break out.':'Pick a company. Explore an up or down case. Check the evidence before deciding what to do.');
+  heading(lane==='stress'?'Funding watch':lane==='volatility'?'Big-swing watch':'Your stock pick board',lane==='stress'?'Company funding questions are clues to investigate, not forecasts of a market-wide crisis.':lane==='volatility'?'Look for changing price behavior and a reason the next move could matter. A quiet stock is not automatically ready to break out.':'Research runs for you. See what changed, explore both directions, and check whether timing and option price support the idea.');
   let companies=(data.move_board||[]).filter(b=>!$('#search').value.trim()||`${b.symbol} ${b.name} ${b.business}`.toLowerCase().includes($('#search').value.trim().toLowerCase()));
   if(lane==='stress'){root.append(weatherPanel());companies=companies.filter(b=>b.stress_flags?.length);}
   if(lane==='volatility'){companies=companies.filter(b=>['Unusual daily move','Movement picking up','Quiet stretch'].includes(b.movement));if(!companies.length){root.append(el('div','Automatic volatility screening awaits computed daily-price statistics. Open a company below to see its interactive price chart and research.','empty'));for(const b of data.move_board||[])root.append(moveTile(b));}}
@@ -195,11 +199,13 @@ async function searchDirectory(){
  }catch(e){root.textContent=e.message;}
 }
 async function openResearch(symbol){
+ const version=++companyRequestVersion;selected=symbol;
  $('#company').hidden=false;$('#board').hidden=true;$('#company').replaceChildren();
  const back=el('button','← Back to board');back.addEventListener('click',()=>{selected=null;render();});$('#company').append(back);
  mountMarketChart($('#company'),companyDetails[symbol]?.company||directoryCompanies[symbol]||{symbol});
  $('#notice').textContent=`Researching ${symbol}: retrieving official filings and financial facts…`;$('#search').value='';$('#directory-results').replaceChildren();
  try{const job=await api('/api/research',{symbol});const result=await api('/api/company?symbol='+encodeURIComponent(symbol));
+ if(version!==companyRequestVersion||selected!==symbol)return;
  companyDetails[symbol]=result;
  const ids=new Set(result.events.map(e=>e.id));data.events=[...result.events,...data.events.filter(e=>!ids.has(e.id))];Object.assign(data.financial_context,result.financial_context);
  if(data.status[0])data.status[0].payload.quantitative={...data.status[0].payload.quantitative,[symbol]:result.price_history?.statistics||{}};
@@ -213,7 +219,7 @@ function appendAssistant(root,symbol){
  form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;output.textContent='Reading the evidence…';try{const result=await api('/api/assistant',{symbol,question:input.value});output.replaceChildren(el('p',result.answer),el('p',result.engine));for(const c of result.citations||[])output.append(sourceLink(c.url,c.quote));list(output,'What would change this assessment',result.invalidation);list(output,'Still missing',result.missing);}catch(err){output.textContent=err.message;}finally{button.disabled=false;}});box.append(form,output);root.append(box);
 }
 async function loadTrack(root){
- try{const result=await api('/api/track-record');if(view!=='track')return;root.append(el('p',result.forecast_status));for(const r of result.snapshots){const n=el('article',undefined,'card');n.append(el('h2',r.symbol),el('p',date(r.created_at)),el('p',`Decision: ${r.payload.action.toUpperCase()} · ${r.payload.source_ids.length} source records · ${r.engine_version}`),el('p',r.payload.summary?.changed||'Research evidence saved for later comparison.'));const b=el('button','Open company');b.addEventListener('click',()=>openResearch(r.symbol));n.append(b);root.append(n);}if(!result.snapshots.length)root.append(el('p','The first completed research job will create a snapshot.'));}catch(e){root.append(el('p',e.message));}
+ try{const result=await api('/api/track-record');if(view!=='track')return;root.append(el('p',result.forecast_status));for(const r of result.snapshots){const n=el('article',undefined,'card');n.append(el('h2',r.symbol),el('p',date(r.created_at)),el('p',`Decision: ${(r.payload.action||r.payload.state||'research').toUpperCase()} · ${(r.payload.source_ids||[]).length} source records · ${r.engine_version}`),el('p',r.payload.summary?.changed||'Research evidence saved for later comparison.'));const b=el('button','Open company');b.addEventListener('click',()=>openResearch(r.symbol));n.append(b);root.append(n);}for(const e of result.evaluations||[]){const n=el('article',undefined,'card');n.append(el('h3','Observed outcome'),el('p',`${e.payload.reference_session} → ${e.payload.outcome_session}: underlying movement ${(e.payload.underlying_return*100).toFixed(2)}%.`),el('p',e.payload.meaning));root.append(n);}if(!result.snapshots.length)root.append(el('p','The first completed research job will create a snapshot.'));}catch(e){root.append(el('p',e.message));}
 }
 
 async function fetchAssessment(idea){
@@ -222,7 +228,9 @@ async function fetchAssessment(idea){
  idea.assessment=await pending;renderIdeas();}catch(e){idea.error=e.message;renderIdeas();}finally{strategyRequests.delete(key);}
 }
 function strategyCard(s){
- const n=el('section',undefined,'strategy-card');n.append(el('h3',`${s.direction==='up'?'↑ Up / call case':'↓ Down / put case'} · ${s.decision}`),el('p',s.summary),el('p',s.mechanism));
+ const n=el('section',undefined,'strategy-card');
+ if(s.verdicts){const v=el('div',undefined,'verdict-grid');for(const [name,label] of [['business','Business evidence'],['timing','Timing setup'],['contract','Option value']]){const item=el('div',label);item.append(el('strong',String(s.verdicts[name]||'Unknown').replaceAll('_',' ')));v.append(item);}n.append(v);}
+ n.append(el('h3',`${s.direction==='up'?'↑ Up / call case':'↓ Down / put case'} · ${s.decision}`),el('p',s.summary),el('p',s.mechanism));
  list(n,'What supports this case',(s.supporting||[]).map(x=>x.text));list(n,'What argues against it',(s.counterevidence||[]).map(x=>x.text));list(n,'Company funding concerns',(s.funding_risks||[]).map(x=>x.text));
  n.append(el('p',`Option selection: ${s.contract_decision||'WAIT'}. ${s.catalyst||''}`));
  for(const r of s.scenarios||[])n.append(el('p',`${r.sessions}-session movement sensitivity: $${r.lower.toFixed(2)}–$${r.upper.toFixed(2)} around $${r.reference_price.toFixed(2)}. Historical-volatility scenario; not a price target or probability.`));
@@ -245,4 +253,35 @@ function drawPriceChart(root,bars){
  const line=document.createElementNS(svg.namespaceURI,'polyline');line.setAttribute('points',bars.map((b,i)=>`${20+i*560/(bars.length-1)},${190-(b.c-low)/range*160}`).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke','#a5f0ba');line.setAttribute('stroke-width','3');svg.append(line);
  root.append(svg,el('p',`${first.session} → ${last.session} · last close $${last.c.toFixed(2)} · period return ${((last.c/first.c-1)*100).toFixed(2)}% · closing-price range $${low.toFixed(2)}–$${high.toFixed(2)}`));
  const details=el('details');details.append(el('summary','Accessible price table'));const table=el('table'),head=el('tr');for(const name of ['Session','Close','Volume'])head.append(el('th',name));table.append(head);for(const b of bars){const r=el('tr');r.append(el('td',b.session),el('td',b.c.toFixed(2)),el('td',Number(b.v).toLocaleString()));table.append(r);}details.append(table);root.append(details);
+}
+
+function appendWorkflow(root,result){
+ const w=result?.research_decision;if(!w)return;
+ const box=el('section',undefined,'research-command');box.append(el('p','YOUR AUTOMATIC RESEARCH BRIEF','eyebrow'),el('h2','The business, the timing, the option.'),el('p',w.summary),el('p',`Evidence checked ${date(w.as_of)} · ${w.source_count} source records · ${w.state}`));
+ if(result.changes)box.append(el('p',`What changed: ${result.changes.summary}`));
+ if(result.sector_context)box.append(el('p',result.sector_context.note));
+ const checks=el('ol');for(const c of w.next_checks||[])checks.append(el('li',c));box.append(el('h3','What the system is checking next'),checks);
+ const playbooks=el('div',undefined,'playbook-grid');for(const p of w.playbooks||[]){const n=el('article');n.append(el('h3',p.name),el('span',p.state.replaceAll('_',' '),'badge'),el('p',p.reason));playbooks.append(n);}
+ const details=el('details');details.append(el('summary','Research checks and original evidence'),playbooks);
+ for(const agent of w.roles||[])details.append(el('p',`${agent.role.replaceAll('_',' ')} · ${agent.status.replaceAll('_',' ')}: ${agent.finding}`));
+ for(const c of (w.claims||[]).slice(0,8)){const q=el('blockquote',c.text);q.append(sourceLink(c.url,'Read supporting source ↗'));details.append(q);}box.append(details);root.append(box);
+}
+function appendLiveQuote(root,symbol){
+ const box=el('section',undefined,'quote-panel');box.append(el('h3','Current price connection'));const output=el('p','Checking the backend quote feed…');output.setAttribute('role','status');box.append(output);root.append(box);
+ async function check(){
+  if(selected!==symbol||document.visibilityState==='hidden'||!box.isConnected)return;
+  try{const q=await api('/api/quote?symbol='+encodeURIComponent(symbol));if(selected!==symbol||!box.isConnected)return;
+   output.textContent=q.bid&&q.ask?`Bid $${q.bid.toFixed(2)} / ask $${q.ask.toFixed(2)} · ${q.feed} · ${q.status.replaceAll('_',' ')} · observed ${date(q.observed_at)}. ${q.scope}. ${q.reason||''}`:q.reason||'No verified backend quote is available.';
+   if(q.observed_at&&selected===symbol)setTimeout(check,30000);
+  }catch(error){output.textContent=error.message;}
+ }
+ void check();
+}
+function appendOptionResearch(root,symbol){
+ const box=el('section',undefined,'card');box.append(el('h3','Automatic call / put check'),el('p','The system checks premium, spread, expiry, quote freshness and missing evidence. You do not need to enter a strategy.'));
+ const button=el('button','Check available contracts'),output=el('div');output.setAttribute('role','status');button.addEventListener('click',async()=>{button.disabled=true;output.textContent='Checking source eligibility and contracts…';try{const r=await api('/api/options?symbol='+encodeURIComponent(symbol));output.replaceChildren(el('p',r.reason||r.status));for(const c of r.contracts||[]){const n=el('article',undefined,'option-contract');n.append(el('h4',`${c.kind.toUpperCase()} · $${c.strike.toFixed(2)} · ${c.expiry}`),el('p',`Decision ${c.decision} · ${c.feed} feed`));if(c.ask)n.append(el('p',`Ask $${c.ask.toFixed(2)}; multiplier ${c.multiplier??'unverified'}.`));list(n,'Checks still needed',c.reasons);output.append(n);}if(!r.contracts?.length)output.append(el('p','Company research remains available while contract data is unavailable.'));}catch(e){output.textContent=e.message;}finally{button.disabled=false;}});box.append(button,output);root.append(box);
+}
+async function appendCapabilities(root){
+ const box=el('section',undefined,'card');box.append(el('h2','What is actually connected'));root.append(box);
+ try{const c=await api('/api/capabilities');if(!c.prices)return;box.append(el('p',`Backend price credentials: ${c.prices.credentials_configured?'configured':'missing'}. Public-use confirmation: ${c.prices.public_use_confirmed?'confirmed':'pending'}. Feed: ${c.prices.feed}.`),el('p',c.prices.cadence),el('p',`Assistant: ${c.assistant.mode}. Hosted generative explanations: ${c.assistant.generative_enabled?'enabled':'not enabled'}.`),el('p',`Forecasts: ${c.forecasts.enabled?'enabled':'not validated'}. Brokerage execution: disabled.`));}catch(e){box.append(el('p',e.message));}
 }

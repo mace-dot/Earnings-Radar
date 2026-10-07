@@ -4,12 +4,12 @@ from datetime import datetime,timezone
 from urllib.parse import quote
 try:
  from ._collector import Fetch,collect_company,collect_feed,CollectionError
- from ._research import enrich,financial_context
+ from ._research import enrich,financial_context,sector_context
  from ._board import company_board
  from ._directory import refresh_directory,discover
 except ImportError:
  from _collector import Fetch,collect_company,collect_feed,CollectionError
- from _research import enrich,financial_context
+ from _research import enrich,financial_context,sector_context
  from _board import company_board
  from _directory import refresh_directory,discover
 
@@ -24,7 +24,7 @@ except ImportError:
  from _news import collect_news,refresh_company
  from _strategy import assess
 
-ENGINE='statistical-fundamental-research-v4'
+ENGINE='autonomous-evidence-workflow-1'
 
 def valid_symbol(s):return isinstance(s,str) and bool(re.fullmatch(r'[A-Z0-9][A-Z0-9.-]{0,14}',s))
 
@@ -34,7 +34,11 @@ def company(store,symbol):
  if not directory:raise ValueError('Company not found in the official directory')
  rows=store.request('radar_events',query='select=*&tickers=cs.'+quote(json.dumps([symbol]))+'&order=published_at.desc&limit=600')
  now=datetime.now(timezone.utc)
- rows=[r for r in rows if datetime.fromisoformat(r['published_at'].replace('Z','+00:00'))<=now]
+ try:
+  from ._workflow import available_events
+ except ImportError:
+  from _workflow import available_events
+ rows=available_events(rows,now)
  events=[readable(e) for e in enrich(rows)];contexts={symbol:financial_context(events,symbol)}
  status=store.request('radar_status',query='select=*&id=eq.collector&limit=1');state=status[0]['payload'] if status else {}
  prices=history(store,symbol);state=dict(state);state['quantitative']={**state.get('quantitative',{}),symbol:prices.get('statistics',{})}
@@ -44,20 +48,30 @@ def company(store,symbol):
  result={'company':directory[0],'events':events,'financial_context':contexts,'move_board':boards,'status':status,'queue':queue[0] if queue else None,
          'automatic_option_evaluation':{'action':'wait','reason':'Authorized options prices, confirmed catalyst timing, and documented expectations are not connected.'},
          'price_history':prices,'assistant_engine':'statistical and fundamental evidence assistant'}
+ result['sector_context']=sector_context(events)
  result['strategies']={d:assess(result,d) for d in ('up','down')}
+ try:
+  from ._workflow import build,changes
+ except ImportError:
+  from _workflow import build,changes
+ result['research_decision']=build(result)
+ prior=store.request('radar_research_snapshots',query='select=payload&symbol=eq.'+symbol+'&order=created_at.desc&limit=1')
+ previous=prior[0]['payload'] if prior else None
+ result['changes']=changes(previous,result['research_decision'])
+ if previous and previous.get('input_hash')==result['research_decision']['input_hash']:
+  result['research_decision']['as_of']=previous['as_of']
+  result['changes']=previous.get('changes',result['changes'])
  return result
 
+def snapshot_row(symbol,result):
+ decision=result['research_decision']
+ payload={**decision,'action':'wait','summary':result['move_board'][0] if result['move_board'] else {},
+          'strategies':result.get('strategies',{}),'changes':result.get('changes',{}),'horizon_kind':'underlying_monitor_not_trade'}
+ return {'id':decision['decision_id'],'symbol':symbol,'engine_version':ENGINE,'payload':payload,
+                 'target':'research_monitor','horizon_sessions':5,'evaluation_status':'pending_underlying_monitor'}
+
 def snapshot(store,symbol,result):
- now=datetime.now(timezone.utc);events=result['events']
- available=[e for e in events if all(datetime.fromisoformat(e[k].replace('Z','+00:00'))<=now for k in ('retrieved_at','published_at'))]
- payload={'action':'wait','direction':'unverified','volatility_forecast':'unavailable','funding_crisis_probability':'unavailable',
-          'source_ids':[e['id'] for e in available[:80]],'as_of':now.isoformat(),
-          'summary':result['move_board'][0] if result['move_board'] else {},
-          'limitations':['No executable options quotes','No consensus expectations','No out-of-sample validated forecasting model'],
-          'forecast_issued':False,'model_enabled':False,'strategies':result.get('strategies',{}),
-          'price_context':{k:result.get('price_history',{}).get(k) for k in ('status','provider','feed','adjustment','retrieved_at','statistics')}}
- store.request('radar_research_snapshots',rows=[{'id':str(uuid.uuid4()),'symbol':symbol,'engine_version':ENGINE,'payload':payload,
-                 'target':'research_monitor','horizon_sessions':5,'evaluation_status':'market_data_unavailable'}],ignore=True)
+ store.request('radar_research_snapshots',rows=[snapshot_row(symbol,result)],ignore=True)
 
 def process_one(store,symbol=None):
  owner=str(uuid.uuid4());job=store.rpc('radar_claim_research',{'p_owner':owner,'p_symbol':symbol})
@@ -79,8 +93,8 @@ def process_one(store,symbol=None):
    jobs={j['name']:j for j in state.get('jobs',[])}
    for j in news_jobs:jobs[j['name']]=j
    state['jobs']=list(jobs.values());store.request('radar_status',rows=[{'id':'collector','updated_at':datetime.now(timezone.utc).isoformat(),'payload':state}])
-  result=company(store,symbol);snapshot(store,symbol,result)
-  if not store.rpc('radar_finish_research',{'p_owner':owner,'p_symbol':symbol,'p_error':None}):raise CollectionError('Research lease expired; result requires recheck')
+  result=company(store,symbol)
+  if not store.rpc('radar_commit_research',{'p_owner':owner,'p_symbol':symbol,'p_snapshot':snapshot_row(symbol,result)}):raise CollectionError('Research lease expired; result requires recheck')
   return {'status':'complete','records':len(rows),'symbol':symbol}
  except Exception as exc:
   error=str(exc) if isinstance(exc,CollectionError) else type(exc).__name__
@@ -96,6 +110,7 @@ def request_research(store,symbol):
  if job.get('status')=='complete':
   refresh_market(store,symbol)
   refresh_company(store,symbol)
+  result=company(store,symbol);snapshot(store,symbol,result)
   return {'status':'cached','symbol':symbol}
  if job.get('status') in ('queued','retry'):return process_one(store,symbol)
  return {'status':job.get('status','queued'),'symbol':symbol}
@@ -126,6 +141,14 @@ def background(store):
    feeds.append({'name':name,'status':'complete','last_success':datetime.now(timezone.utc).isoformat(),'records':len(rows),'last_error':None})
   except Exception as exc:feeds.append({'name':name,'status':'retry','last_error':type(exc).__name__})
  feeds.extend(collect_news(store,deadline=deadline))
+ evaluation={}
+ if time.monotonic()<deadline-20:
+  try:
+   from ._evaluation import run as evaluate
+  except ImportError:
+   from _evaluation import run as evaluate
+  try:evaluation=evaluate(store)
+  except Exception:evaluation={'status':'unavailable'}
  previous=store.request('radar_status',query='select=*&id=eq.collector&limit=1');state=previous[0]['payload'] if previous else {}
  jobs={j['name']:j for j in state.get('jobs',[])}
  for feed in feeds:jobs[feed['name']]={**jobs.get(feed['name'],{}),**feed}
@@ -137,4 +160,4 @@ def background(store):
  state.update({'discovery':discovery,'jobs':list(jobs.values()),'cadence':'daily_scheduled','collection_note':'Daily broad filing discovery with bounded deep research; on-demand search research is automatic.',
                'research_engine':ENGINE,'assistant_engine':'deterministic evidence assistant','market_feed':'authorized adapter; per-company cache reports actual availability','options_feed':'not_configured'})
  store.request('radar_status',rows=[{'id':'collector','updated_at':datetime.now(timezone.utc).isoformat(),'payload':state}])
- return {'status':'complete','discovery_matches':discovery.get('matched_companies',0),'research':results,'records':sum(r.get('records',0) for r in results)}
+ return {'status':'complete','discovery_matches':discovery.get('matched_companies',0),'research':results,'evaluation':evaluation,'records':sum(r.get('records',0) for r in results)}

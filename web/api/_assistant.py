@@ -1,5 +1,5 @@
 """Evidence-based assistant with an explicitly optional, bounded model adapter."""
-import hashlib,json,os
+import hashlib,json,os,re
 from urllib.request import Request,urlopen
 try:
  from ._orchestrator import company
@@ -34,6 +34,11 @@ def validate_model(payload,rows):
  if not isinstance(payload['invalidation'],list) or any(not isinstance(x,str) or len(x)>500 for x in payload['invalidation']):raise ValueError('Invalid invalidation conditions')
  if not isinstance(payload['citations'],list) or not 1<=len(payload['citations'])<=8:raise ValueError('Citations required')
  by_id={e['id']:e for e in rows};cites=[]
+ numeric_context=[{'title':e['title'],'passages':[x.get('text','') for x in e.get('evidence_meta',{}).get('excerpts',[])],
+   'facts':{k:e.get('evidence_meta',{}).get(k) for k in ('value','start','end')},'calculations':e.get('research',{}).get('calculations',[])} for e in rows]
+ allowed_numbers=set(re.findall(r'\d+(?:[,.]\d+)*',json.dumps(numeric_context)))
+ if any(n not in allowed_numbers for n in re.findall(r'\d+(?:[,.]\d+)*',payload['answer'])):raise ValueError('Unverified numerical claim')
+ if re.search(r'guaranteed|sure win|chance of profit|success probability',payload['answer'],re.I):raise ValueError('Unsupported predictive claim')
  for c in payload['citations']:
   if not isinstance(c,dict) or set(c)!={'evidence_id','quote'} or c['evidence_id'] not in by_id:raise ValueError('Unresolved source')
   e=by_id[c['evidence_id']];texts=[e['title']]+[s['text'] for s in e.get('evidence_meta',{}).get('excerpts',[])]
@@ -45,6 +50,10 @@ def validate_model(payload,rows):
 def answer(store,symbol,question):
  if not isinstance(question,str) or not 1<=len(question.strip())<=400:raise ValueError('Ask a company research question of up to 400 characters')
  result=company(store,symbol);fallback=deterministic(result,question)
+ workflow=result.get('research_decision',{})
+ if any(w in question.lower() for w in ('changed','next','wait','counterargument','expiry')):
+  parts=[workflow.get('summary','')]+([result.get('changes',{}).get('summary','')] if 'changed' in question.lower() else workflow.get('next_checks',[]))
+  fallback={**fallback,'answer':' '.join(p for p in parts if p),'decision_id':workflow.get('decision_id'),'as_of':workflow.get('as_of'),'workflow_status':workflow.get('state'),'missing':workflow.get('next_checks',[])}
  direction='down' if any(w in question.lower() for w in ('down','put','bear')) else 'up' if any(w in question.lower() for w in ('up','call','bull')) else None
  if direction:
   strategy=result['strategies'][direction]
@@ -54,7 +63,7 @@ def answer(store,symbol,question):
  if os.getenv('RADAR_AI_ENABLED','false').lower()!='true' or not os.getenv('GROQ_API_KEY'):return fallback
  rows=result['events'][:12]
  if not rows:return fallback
- identity=hashlib.sha256(json.dumps([symbol,question,MODEL,[e['id'] for e in rows]]).encode()).hexdigest()
+ identity=hashlib.sha256(json.dumps([symbol,question,MODEL,[e['id'] for e in rows],workflow.get('input_hash')]).encode()).hexdigest()
  cached=store.request('radar_model_cache',query='select=payload&id=eq.'+identity+'&limit=1')
  if cached:return cached[0]['payload']
  if not store.rpc('radar_reserve_model_call',{}):return {**fallback,'model_status':'daily_limit_reached'}

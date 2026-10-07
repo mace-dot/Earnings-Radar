@@ -15,33 +15,43 @@ from xml.etree import ElementTree
 from urllib.parse import urlsplit
 
 CIKS={'AAPL':'0000320193','MSFT':'0000789019','NVDA':'0001045810','AMZN':'0001018724','TSLA':'0001318605','META':'0001326801','GOOGL':'0001652044','GOOG':'0001652044','JPM':'0000019617','WMT':'0000104169','XOM':'0000034088','NFLX':'0001065280','AMD':'0000002488','DIS':'0001744489','BAC':'0000070858'}
-TAGS=['RevenueFromContractWithCustomerExcludingAssessedTax','NetIncomeLoss','GrossProfit','OperatingIncomeLoss','NetCashProvidedByUsedInOperatingActivities','PaymentsToAcquirePropertyPlantAndEquipment','Assets','Liabilities','InterestExpense','Revenues','SalesRevenueNet','AssetsCurrent','LiabilitiesCurrent','CashAndCashEquivalentsAtCarryingValue']
+TAGS=['RevenueFromContractWithCustomerExcludingAssessedTax','NetIncomeLoss','GrossProfit','OperatingIncomeLoss','NetCashProvidedByUsedInOperatingActivities','PaymentsToAcquirePropertyPlantAndEquipment','Assets','Liabilities','InterestExpense','Revenues','SalesRevenueNet','AssetsCurrent','LiabilitiesCurrent','CashAndCashEquivalentsAtCarryingValue','LongTermDebtCurrent','LongTermDebtNoncurrent','ShortTermBorrowings','StockBasedCompensation','CommonStockSharesOutstanding','StockholdersEquity']
 FEEDS={'fed_press':'https://www.federalreserve.gov/feeds/press_all.xml','fed_speeches':'https://www.federalreserve.gov/feeds/speeches.xml'}
 class CollectionError(RuntimeError):pass
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args):return None
 
 class Text(HTMLParser):
-    def __init__(self):super().__init__();self.parts=[];self.skip=0
+    def __init__(self):super().__init__();self.parts=[];self.stack=[]
     def handle_starttag(self,t,a):
-        if t in ('script','style'):self.skip+=1
-        if t in ('p','div','tr','br','li','h1','h2','h3') and not self.skip:self.parts.append('\n')
+        attrs=dict(a);hidden=t in ('script','style','ix:hidden') or 'hidden' in attrs or 'display:none' in attrs.get('style','').replace(' ','').lower()
+        inherited=any(x[1] for x in self.stack)
+        if t not in ('br','img','hr','meta','link','input','wbr','source'):self.stack.append((t,hidden))
+        if t in ('p','div','tr','br','li','h1','h2','h3') and not inherited and not hidden:self.parts.append('\n')
     def handle_endtag(self,t):
-        if t in ('script','style'):self.skip=max(0,self.skip-1)
-        if t in ('p','div','tr','li'):self.parts.append('\n')
+        for i in range(len(self.stack)-1,-1,-1):
+            if self.stack[i][0]==t:self.stack=self.stack[:i];break
     def handle_data(self,d):
-        if not self.skip:self.parts.append(d)
+        if not any(x[1] for x in self.stack):self.parts.append(d)
 
 def excerpts(body):
     parser=Text();parser.feed(body.decode('utf-8',errors='replace'))
     paragraphs=[' '.join(p.split()) for p in ''.join(parser.parts).split('\n') if p.strip()]
-    terms=('revenue','margin','cash flow','outlook','liquidity','net income','net loss','interest rate','inflation','monetary policy')
-    output=[];offset=0
+    categories=[('liquidity','debt','maturity','funding'),('outlook','guidance','expects'),('revenue','sales'),('cash flow','net income','net loss','margin'),('interest rate','inflation','monetary policy')]
+    choices=[];offset=0;seen=set()
     for p in paragraphs:
-        if len(p)>45 and any(t in p.lower() for t in terms):output.append({'text':p[:1200],'start':offset,'end':offset+min(len(p),1200)})
+        if len(p)>45 and len(re.findall(r'\b[A-Za-z]{2,}\b',p))>=5:
+            groups=[i for i,terms in enumerate(categories) if any(re.search(r'\b'+re.escape(t)+r'\b',p,re.I) for t in terms)]
+            if groups:choices.append((p,offset,groups))
         offset+=len(p)+1
-        if len(output)>=5:break
-    return output
+    selected=[]
+    for category in range(len(categories)):
+        row=next((x for x in choices if category in x[2] and x[0] not in seen),None)
+        if row:selected.append(row);seen.add(row[0])
+    for row in choices:
+        if len(selected)>=5:break
+        if row[0] not in seen:selected.append(row);seen.add(row[0])
+    return [{'text':p[:1200],'start':offset,'end':offset+min(len(p),1200)} for p,offset,_ in selected[:5]]
 
 class Fetch:
     def __init__(self,deadline):self.deadline=deadline;self.last=0;self.opener=build_opener(NoRedirect())
@@ -81,8 +91,15 @@ def event(provider,pid,title,url,published,tickers=(),metadata=None,institution=
 
 def collect_company(fetch,symbol,cik):
     rows=[];data=fetch.json(f'https://data.sec.gov/submissions/CIK{cik}.json');recent=data.get('filings',{}).get('recent',{})
-    for i,pid in enumerate(recent.get('accessionNumber',[])[:25]):
-        form=recent['form'][i]
+    allowed=('8-K','8-K/A','10-Q','10-Q/A','10-K','10-K/A','20-F','20-F/A','6-K','40-F')
+    candidates=[i for i,form in enumerate(recent.get('form',[])) if form in allowed]
+    chosen=candidates[:3]
+    for prefix in ('10-Q','10-K','20-F','40-F'):
+        index=next((i for i in candidates if recent['form'][i].startswith(prefix)),None)
+        if index is not None and index not in chosen and len(chosen)<5:chosen.append(index)
+    documents=0
+    for i in chosen:
+        pid=recent['accessionNumber'][i];form=recent['form'][i]
         if form not in ('8-K','8-K/A','10-Q','10-Q/A','10-K','10-K/A','20-F','20-F/A','6-K','40-F'):continue
         doc=recent['primaryDocument'][i]
         if not re.fullmatch(r'\d{10}-\d{2}-\d{6}',pid) or not re.fullmatch(r'[A-Za-z0-9_.-]+',doc):continue
@@ -92,20 +109,35 @@ def collect_company(fetch,symbol,cik):
         url=f'https://www.sec.gov/Archives/edgar/data/{int(cik)}/{pid.replace("-","")}/{doc}'
         meta={'form':form,'cik':cik,'report_date':recent.get('reportDate',['']*len(recent['form']))[i]}
         meta['company_name']=data.get('name',symbol)
+        meta['sic']=data.get('sic');meta['sic_description']=data.get('sicDescription')
         meta['former_names']=[n['name'] for n in data.get('formerNames',[]) if n.get('name')][:20]
-        if len(rows)<2:
+        if documents<3 and (documents==0 or form.startswith(('10-Q','10-K','20-F','40-F'))):
+            documents+=1
             try:meta['excerpts']=excerpts(fetch.get(url,20_000_000))
             except CollectionError as exc:meta['document_error']=str(exc)
         rows.append(event('sec',pid,f'{symbol} filed {form}',url,pub.astimezone(timezone.utc).isoformat(),[symbol],meta))
-        if len(rows)>=5:break
+        if len([r for r in rows if r['provider']=='sec'])<=2 and form.startswith('8-K'):
+            try:
+                listing=fetch.json(f'https://www.sec.gov/Archives/edgar/data/{int(cik)}/{pid.replace("-","")}/index.json')
+                exhibit=next((x['name'] for x in listing.get('directory',{}).get('item',[]) if re.fullmatch(r'[A-Za-z0-9_.-]+\.html?',x.get('name',''),re.I) and re.search(r'ex(?:hibit)?[-_]?99',x['name'],re.I)),None)
+                if exhibit:
+                    link=f'https://www.sec.gov/Archives/edgar/data/{int(cik)}/{pid.replace("-","")}/{exhibit}'
+                    passages=excerpts(fetch.get(link,20_000_000))
+                    if passages:rows.append(event('sec_document',pid+':'+exhibit,f'{symbol} official 8-K exhibit',link,pub.astimezone(timezone.utc).isoformat(),[symbol],{**meta,'excerpts':passages,'document_kind':'official filing exhibit'}))
+            except (CollectionError,ValueError,KeyError,TypeError):pass
+        if len([r for r in rows if r['provider']=='sec'])>=5:break
+    try:
+        facts=json.loads(fetch.get(f'https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json',20_000_000)).get('facts',{}).get('us-gaap',{})
+    except (CollectionError,ValueError):facts=None
     for tag in TAGS:
         url=f'https://data.sec.gov/api/xbrl/companyconcept/CIK{cik}/us-gaap/{tag}.json'
-        try:concept=fetch.json(url)
+        try:concept=facts.get(tag,{}) if facts is not None else fetch.json(url)
         except CollectionError as exc:
             if str(exc)=='Source HTTP 404':continue
             raise
         periods={}
-        for f in concept.get('units',{}).get('USD',[]):
+        unit='shares' if tag=='CommonStockSharesOutstanding' else 'USD'
+        for f in concept.get('units',{}).get(unit,[]):
             if f.get('form') not in ('10-K','10-Q','10-K/A','10-Q/A') or not f.get('end'):continue
             if not isinstance(f.get('val'),(float,int)) or not math.isfinite(f['val']):continue
             end=datetime.fromisoformat(f['end']);start=datetime.fromisoformat(f['start']) if f.get('start') else None
@@ -117,8 +149,8 @@ def collect_company(fetch,symbol,cik):
             if key not in periods or (f['filed'],f['accn'])>(periods[key]['filed'],periods[key]['accn']):periods[key]=f
         for (start,end),f in sorted(periods.items(),key=lambda x:x[0][1],reverse=True)[:8]:
             pub=datetime.fromisoformat(f['filed']).replace(hour=23,minute=59,second=59,tzinfo=timezone.utc).isoformat()
-            m={'tag':tag,'value':f['val'],'units':'USD','start':start,'end':end,'filed':f['filed'],'accession':f['accn'],'publication_precision':'filing_date_end_of_day_bound'}
-            rows.append(event('sec_fundamentals',f'{symbol}:{tag}:{start}:{end}',f'{symbol}: {tag} {f["val"]:,.0f} USD for {start or "balance at"} to {end}',url,pub,[symbol],m,'SEC XBRL'))
+            m={'tag':tag,'value':f['val'],'units':unit,'sic':data.get('sic'),'sic_description':data.get('sicDescription'),'start':start,'end':end,'filed':f['filed'],'accession':f['accn'],'publication_precision':'filing_date_end_of_day_bound'}
+            rows.append(event('sec_fundamentals',f'{symbol}:{tag}:{start}:{end}',f'{symbol}: {tag} {f["val"]:,.0f} {unit} for {start or "balance at"} to {end}',url,pub,[symbol],m,'SEC XBRL'))
     return rows
 
 def collect_feed(fetch,name,url):

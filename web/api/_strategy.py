@@ -58,4 +58,6 @@ def assess(result,direction):
   'missing':missing,'next_step':'Monitor the automatically collected company evidence; specific contracts remain unavailable until quotes and event timing are connected.',
   'methods':'Matched-period year-over-year changes; cash conversion and coverage ratios; completed-session momentum and volatility sensitivity. No investor success claim or forecast probability.',
   'limitations':['Historical fundamentals can lag current conditions. Indicators may be correlated; their count is not a probability.','No independent source contradicting a claim does not prove the claim true.'],
-  'as_of':datetime.now(timezone.utc).isoformat(),'evidence_support':support_state}
+  'as_of':datetime.now(timezone.utc).isoformat(),'evidence_support':support_state,
+  'verdicts':{'business':support_state,'timing':'watch' if fresh else 'data_blocked','contract':'WAIT','personal_sizing':'unassessed'},
+  'strategy_version':'directional-case-5','policy_version':'research-policy-1'}

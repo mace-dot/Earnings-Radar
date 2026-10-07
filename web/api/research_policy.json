@@ -1,0 +1,116 @@
+{
+  "schema_version": "planning-1.0",
+  "status": "PROPOSED_NOT_ACTIVE",
+  "scope": {
+    "asset_universe": "initially_liquid_US_common_equities",
+    "instruments": [
+      "long_call",
+      "long_put"
+    ],
+    "broker_execution": false,
+    "paid_services_enabled": false
+  },
+  "decision_dimensions": [
+    "business_evidence",
+    "timing_setup",
+    "contract_economics",
+    "data_eligibility",
+    "model_validation",
+    "personal_risk_context"
+  ],
+  "states": [
+    "DISCOVERED",
+    "RESEARCHING",
+    "WATCH",
+    "RESEARCH_CANDIDATE",
+    "INVALIDATED",
+    "EXPIRED",
+    "EVALUATED"
+  ],
+  "capability_flags": [
+    "DATA_BLOCKED",
+    "MODEL_UNVALIDATED",
+    "PERSONAL_SIZING_UNASSESSED"
+  ],
+  "proposed_defaults": {
+    "not_manager_rules": true,
+    "require_validation": true,
+    "stock_quote_max_age_seconds_open_session": 15,
+    "option_quote_max_age_seconds_open_session": 30,
+    "option_spread_review_if_fraction_of_mid_exceeds": 0.1,
+    "option_spread_review_if_absolute_dollars_exceeds": 0.2,
+    "delta_comparison_range": [
+      0.35,
+      0.65
+    ],
+    "days_to_expiry_comparison_range": [
+      14,
+      60
+    ],
+    "zero_day_options_eligible": false,
+    "event_expiry_buffer": "strategy_and_event_specific_not_fixed_universal"
+  },
+  "contract_vetoes": [
+    "instrument_identity_unresolved",
+    "usage_entitlement_unverified",
+    "indicative_only_feed",
+    "stale_quote",
+    "crossed_quote",
+    "missing_contract_multiplier",
+    "unsupported_adjusted_contract",
+    "unknown_catalyst_timing_for_event_strategy",
+    "financial_period_mismatch",
+    "missing_executable_quote"
+  ],
+  "probability_gate": {
+    "requires": [
+      "approved_model_version",
+      "point_in_time_evaluation",
+      "horizon_and_universe_match",
+      "calibration_report",
+      "uncertainty_estimate"
+    ],
+    "forbidden_proxies": [
+      "agent_vote",
+      "indicator_count",
+      "option_delta_as_profit_probability",
+      "risk_neutral_as_real_world"
+    ]
+  },
+  "position_sizing": {
+    "approved_budget_required": true,
+    "unknown_portfolio_is_not_empty_portfolio": true,
+    "default_without_context": "one_contract_premium_exposure_only_no_quantity_advice"
+  },
+  "freshness_semantics": {
+    "closed_session": "last_session_context_not_live_entry",
+    "financials": "latest_verified_filing_with_period_and_publication_time",
+    "headlines": "publication_and_retrieval_time_separate",
+    "open_interest": "explicit_as_of_date",
+    "chart": "display_only_not_backend_input"
+  },
+  "audit_required_fields": [
+    "decision_id",
+    "as_of",
+    "instrument_id",
+    "strategy_version",
+    "observation_ids",
+    "feature_versions",
+    "supporting_claim_ids",
+    "counterevidence_ids",
+    "missing_reasons",
+    "eligibility_results",
+    "invalidation_rules",
+    "next_review_trigger"
+  ],
+  "promotion": {
+    "self_promotion_allowed": false,
+    "untouched_evaluation_required": true,
+    "contract_backtest_requires_contract_data": true
+  },
+  "side_effects": {
+    "external_notifications": "explicit_opt_in",
+    "trade_execution": "disabled",
+    "deployment": "separate_implementation_scope"
+  }
+}
