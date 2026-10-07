@@ -53,8 +53,10 @@ def collect_alpaca(symbol):
 def history(store,symbol):
  rows=store.request('radar_market_cache',query='select=*&symbol=eq.'+symbol+'&limit=1')
  row=rows[0] if rows else {};payload=row.get('payload',{})
- if not payload.get('bars'):return {'status':'not_configured' if not os.getenv('ALPACA_API_KEY') or not os.getenv('ALPACA_API_SECRET') else 'unavailable','bars':[],
-   'reason':row.get('last_error') or 'Connect ALPACA_API_KEY and ALPACA_API_SECRET in Vercel server environment settings for authorized daily stock history.',
+ configured=bool(os.getenv('ALPACA_API_KEY') and os.getenv('ALPACA_API_SECRET'))
+ display=os.getenv('RADAR_MARKET_DISPLAY_AUTHORIZED','false').lower()=='true'
+ if not payload.get('bars'):return {'status':'not_configured' if not configured else 'authorization_required' if not display else 'unavailable','bars':[],
+   'reason':('Alpaca keys are connected. Public price display awaits confirmation of the provider display entitlement.' if configured and not display else row.get('last_error') or 'Connect ALPACA_API_KEY and ALPACA_API_SECRET in Vercel server environment settings for authorized daily stock history.'),
    'news_status':row.get('news_status',[]),'statistics':{'status':'unavailable'},'required_credentials':['ALPACA_API_KEY','ALPACA_API_SECRET']}
  asof=datetime.fromisoformat(payload['bars'][-1]['session']).replace(tzinfo=timezone.utc)
  retrieved=datetime.fromisoformat(payload['retrieved_at'].replace('Z','+00:00'))
