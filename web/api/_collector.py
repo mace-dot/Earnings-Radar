@@ -15,7 +15,7 @@ from xml.etree import ElementTree
 from urllib.parse import urlsplit
 
 CIKS={'AAPL':'0000320193','MSFT':'0000789019','NVDA':'0001045810','AMZN':'0001018724','TSLA':'0001318605','META':'0001326801','GOOGL':'0001652044','GOOG':'0001652044','JPM':'0000019617','WMT':'0000104169','XOM':'0000034088','NFLX':'0001065280','AMD':'0000002488','DIS':'0001744489','BAC':'0000070858'}
-TAGS=['RevenueFromContractWithCustomerExcludingAssessedTax','NetIncomeLoss','GrossProfit','OperatingIncomeLoss','NetCashProvidedByUsedInOperatingActivities','PaymentsToAcquirePropertyPlantAndEquipment','Assets','Liabilities','InterestExpense']
+TAGS=['RevenueFromContractWithCustomerExcludingAssessedTax','NetIncomeLoss','GrossProfit','OperatingIncomeLoss','NetCashProvidedByUsedInOperatingActivities','PaymentsToAcquirePropertyPlantAndEquipment','Assets','Liabilities','InterestExpense','Revenues','SalesRevenueNet','AssetsCurrent','LiabilitiesCurrent','CashAndCashEquivalentsAtCarryingValue']
 FEEDS={'fed_press':'https://www.federalreserve.gov/feeds/press_all.xml','fed_speeches':'https://www.federalreserve.gov/feeds/speeches.xml'}
 class CollectionError(RuntimeError):pass
 class NoRedirect(HTTPRedirectHandler):
@@ -110,7 +110,7 @@ def collect_company(fetch,symbol,cik):
             if not isinstance(f.get('val'),(float,int)) or not math.isfinite(f['val']):continue
             end=datetime.fromisoformat(f['end']);start=datetime.fromisoformat(f['start']) if f.get('start') else None
             days=(end-start).days if start else None
-            if days is not None and not (70<=days<=105 or 350<=days<=380):continue
+            if days is not None and not (70<=days<=105 or 160<=days<=200 or 250<=days<=295 or 350<=days<=380):continue
             pub=datetime.fromisoformat(f['filed']).replace(hour=23,minute=59,second=59,tzinfo=timezone.utc)
             if pub>datetime.now(timezone.utc):continue
             key=(f.get('start'),f['end'])

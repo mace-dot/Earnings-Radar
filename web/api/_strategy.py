@@ -29,7 +29,7 @@ def assess(result,direction):
  latest={}
  for r in sorted(ratios,key=lambda r:r['period_end'],reverse=True):latest.setdefault(r['label'],r)
  risks=[]
- for label,test,meaning in [('Interest coverage',lambda x:x<1,'Operating profit did not cover reported interest expense.'),('Cash conversion',lambda x:x<0,'Reported profit was accompanied by negative operating cash flow.'),('Liabilities / assets',lambda x:x>100,'Recorded liabilities exceeded recorded assets.')]:
+ for label,test,meaning in [('Current ratio',lambda x:x<1,'Reported short-term assets were smaller than short-term obligations.'),('Interest coverage',lambda x:x<1,'Operating profit did not cover reported interest expense.'),('Cash conversion',lambda x:x<0,'Reported profit was accompanied by negative operating cash flow.'),('Liabilities / assets',lambda x:x>100,'Recorded liabilities exceeded recorded assets.')]:
   r=latest.get(label)
   if r and test(r['value']):risks.append({'text':meaning+' Period ended '+r['period_end']+'.','evidence_ids':r['evidence_ids']})
  support=[s for s in signals if s['supports']];against=[s for s in signals if not s['supports']]
@@ -40,12 +40,18 @@ def assess(result,direction):
  missing=[]
  if not fresh:missing.append('Fresh completed-session price history and sufficient observations')
  missing.extend(['Confirmed upcoming catalyst/date','Current options chain, executable bid/ask and implied volatility','Documented market expectations and valuation context'])
+ reported=[]
+ for e in sorted(events,key=lambda x:x['published_at'],reverse=True):
+  if e.get('evidence_meta',{}).get('source_kind')!='publisher RSS headline':continue
+  age=(datetime.now(timezone.utc)-datetime.fromisoformat(e['published_at'].replace('Z','+00:00'))).days
+  if 0<=age<=7:reported.append({'title':e['title'],'url':e.get('readable_url',e['url']),'published_at':e['published_at'],'evidence_id':e['id'],'status':'reported; corroboration required'})
+  if len(reported)>=4:break
  citations=[]
  ids={eid for s in signals+risks for eid in s.get('evidence_ids',[])}
  for e in events:
   if e['id'] in ids:citations.append({'evidence_id':e['id'],'title':e.get('display_title',e['title']),'url':e.get('readable_url',e['url'])})
  return {'symbol':symbol,'direction':direction,'decision':'WATCH' if support else 'WAIT','contract_decision':'WAIT','summary':case,'mechanism':explanation,
-  'supporting':support,'counterevidence':against,'funding_risks':risks,'scenarios':scenarios,'citations':citations[:12],
+  'supporting':support,'counterevidence':against,'reported_developments':reported,'funding_risks':risks,'scenarios':scenarios,'citations':citations[:12],
   'horizon':'5–20 trading sessions for price sensitivity; business evidence refers to reported fiscal periods.',
   'catalyst':'Next company update; upcoming date not confirmed.',
   'invalidation':['A new disclosure reverses the observed financial pattern.','The selected price trend reverses or is explained by a corporate action.','Option pricing implies more movement than the evidence-based scenario justifies.'],

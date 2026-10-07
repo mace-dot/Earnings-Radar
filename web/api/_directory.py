@@ -69,7 +69,7 @@ def discover(store,fetch=None,now=None):
    raise
   matches=[];seen=set()
   for filing in sorted(filings,key=lambda x:(0 if x['form'] in ('10-Q','10-K','20-F') else 1,x['cik'])):
-   for company in by_cik.get(filing['cik'],[]):
+   for company in sorted(by_cik.get(filing['cik'],[]),key=lambda c:(len(c['symbol']),c['symbol']))[:1]:
     if company['symbol'] in seen:continue
     seen.add(company['symbol']);matches.append({**company,'discovery_form':filing['form'],'discovery_date':filing['filed'],'discovery_source':filing['url']})
   accepted=0

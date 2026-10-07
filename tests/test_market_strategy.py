@@ -86,3 +86,12 @@ def test_provider_failure_does_not_replace_usable_cache(monkeypatch):
  s=Store();r=refresh(s,'AAPL')
  assert r['bars']==payload['bars'] and 'payload' not in s.patch
  assert s.patch['last_error']=='Provider unavailable'
+
+def test_current_ratio_uses_matched_balance_periods():
+ from web.api._research import financial_context
+ def fact(tag,value,end):return {'id':tag+end,'tickers':['TEST'],'published_at':'2026-08-01T00:00:00Z','evidence_meta':{'tag':tag,'value':value,'end':end,'units':'USD'}}
+ rows=[fact('AssetsCurrent',100,'2026-06-30'),fact('LiabilitiesCurrent',200,'2026-06-30'),fact('AssetsCurrent',500,'2025-12-31')]
+ ratios=financial_context(rows,'TEST')
+ current=next(r for r in ratios if r['label']=='Current ratio')
+ assert current['value']==.5 and len(current['evidence_ids'])==2
+ assert current['period_end']=='2026-06-30'

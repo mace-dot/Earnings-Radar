@@ -137,5 +137,6 @@ def financial_context(events,symbol):
             output.append({'label':'Free cash flow proxy','value':a['evidence_meta']['value']-b['evidence_meta']['value'],'period_end':period[1],
                            'evidence_ids':[a['id'],b['id']],'unit':'USD','limitation':'Operating cash flow less reported property/plant/equipment purchases; not all forms of investment.'})
         ratio('Interest coverage',g.get('OperatingIncomeLoss'),g.get('InterestExpense'))
+        ratio('Current ratio',g.get('AssetsCurrent'),g.get('LiabilitiesCurrent'))
         ratio('Liabilities / assets',g.get('Liabilities'),g.get('Assets'),100)
     return output[:30]
