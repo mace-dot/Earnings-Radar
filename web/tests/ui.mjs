@@ -7,8 +7,9 @@ const event={id:'a'.repeat(64),provider:'sec_fundamentals',provider_event_id:'a'
 const payload={events:[event],status:[{updated_at:'2026-10-06T00:00:00Z',payload:{jobs:[],cadence:'daily_scheduled'}}],weekly:[event.id],financial_context:{AAPL:[]},source_health:[{id:'wsj',name:'Wall Street Journal',integration_status:'licensed access required',records:0,errors:[],documentation_url:'https://www.wsj.com'}]};
 payload.move_board=[{symbol:'AAPL',name:'Apple',evidence_id:event.id,business:'Profit improved, but cash conversion needs checking.',business_signal:'Business growing',movement:'Price data needed',movement_note:'Price history is not connected.',stress_flags:[],catalyst:'Date not confirmed.'}];
 const calls=[];
-const sandbox={document,window,URL,Date,console,setTimeout,fetch:async(path,options)=>{calls.push({path,options});let d=path==='/api/dashboard'||path.startsWith('/api/company')?payload:path==='/api/research'?{status:'cached'}:path==='/api/session'?{user:null}:{watchlist:[]};if(options&&path==='/api/session')return{ok:false,json:async()=>({error:'Sign in'})};return{ok:true,json:async()=>d};}};
+const sandbox={document,window,URL,URLSearchParams,Date,console,setTimeout,fetch:async(path,options)=>{calls.push({path,options});let d=path==='/api/dashboard'||path.startsWith('/api/company')?payload:path==='/api/research'?{status:'cached'}:path==='/api/session'?{user:null}:{watchlist:[]};if(options&&path==='/api/session')return{ok:false,json:async()=>({error:'Sign in'})};return{ok:true,json:async()=>d};}};
 vm.runInNewContext(readFileSync(new URL('../public/options.js',import.meta.url),'utf8'),sandbox);
+vm.runInNewContext(readFileSync(new URL('../public/price-widget.js',import.meta.url),'utf8'),sandbox);
 vm.runInNewContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),sandbox);
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.match(document.querySelector('#board').textContent,/Profit improved/);
@@ -35,7 +36,7 @@ assert.match(document.querySelector('#idea-list').textContent,/AAPL.*Up.*call re
 document.querySelector('#save-ideas').dispatchEvent(new window.Event('click'));
 assert.match(document.querySelector('#idea-message').textContent,/Sign in first/);
 document.querySelector('[data-lane="volatility"]').dispatchEvent(new window.Event('click'));
-assert.match(document.querySelector('#board').textContent,/need connected price history/);
+assert.match(document.querySelector('#board').textContent,/Automatic volatility screening awaits/);
 document.querySelector('[data-lane="stress"]').dispatchEvent(new window.Event('click'));
 assert.match(document.querySelector('#board').textContent,/Unknown.*current interbank/s);
 console.log('UI smoke passed: navigation, company dossier, missing-data states, unsafe-content handling and authenticated collection gate');
@@ -85,3 +86,9 @@ assert.match(document.querySelector('#company').textContent,/period return/);
 assert.ok(document.querySelector('#company svg[role="img"]'));
 assert.match(document.querySelector('#company').textContent,/Accessible price table/);
 console.log('Strategy/chart UI smoke passed: automatic direction assessment, counterevidence and accessible price history');
+
+const chartSymbol=vm.runInNewContext("marketChartSymbol({symbol:'AAPL',exchange:'Nasdaq'})",sandbox);assert.equal(chartSymbol,'NASDAQ:AAPL');
+assert.equal(vm.runInNewContext("marketChartSymbol({symbol:'BRK-B',exchange:'NYSE'})",sandbox),'NYSE:BRK.B');
+assert.throws(()=>vm.runInNewContext("marketChartSymbol({symbol:'AAPL&steal=1'})",sandbox));
+const providerFrame=document.querySelector('.market-chart-frame');assert.ok(providerFrame);assert.match(providerFrame.src,/^https:\/\/s\.tradingview\.com\/widgetembed\//);assert.match(providerFrame.title,/interactive price chart/);
+console.log('Hosted chart smoke passed: provider URL, exchange mapping, attribution and symbol validation');

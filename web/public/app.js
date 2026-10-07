@@ -5,7 +5,7 @@ const $ = s => document.querySelector(s);
 const el = (tag, text, cls) => { const n=document.createElement(tag); if(text!==undefined) n.textContent=text; if(cls)n.className=cls; return n; };
 const evidenceUrl=e=>e.readable_url||e.url;
 const evidenceTitle=e=>e.display_title||e.title;
-let companyDetails={},strategyRequests=new Map();
+let companyDetails={},directoryCompanies={},strategyRequests=new Map();
 const date = s => { const d=new Date(s); return Number.isNaN(d.valueOf())?'Unavailable':d.toLocaleString(); };
 const pct = v => typeof v==='number'&&Number.isFinite(v)?`${v.toFixed(1)}%`:'Unavailable';
 function sourceLink(url,label){
@@ -67,6 +67,7 @@ function showCompany(symbol,ready=false){
  if(!ready){openResearch(symbol);return;}
  selected=symbol;$('#board').hidden=true;$('#company').hidden=false;const root=$('#company');root.replaceChildren();
  const back=el('button','← Back to board');back.addEventListener('click',()=>{selected=null;render();});root.append(back,el('h2',`${symbol} · Research dossier`));
+ mountMarketChart(root,companyDetails[symbol]?.company||directoryCompanies[symbol]||{symbol});
  appendPriceHistory(root,companyDetails[symbol]?.price_history);
  appendAssistant(root,symbol);
  const newsHealth=companyDetails[symbol]?.price_history?.news_status||[];
@@ -114,7 +115,7 @@ function render(){
   heading(lane==='stress'?'Funding watch':lane==='volatility'?'Big-swing watch':'Your stock pick board',lane==='stress'?'Company funding questions are clues to investigate, not forecasts of a market-wide crisis.':lane==='volatility'?'Look for changing price behavior and a reason the next move could matter. A quiet stock is not automatically ready to break out.':'Pick a company. Explore an up or down case. Check the evidence before deciding what to do.');
   let companies=(data.move_board||[]).filter(b=>!$('#search').value.trim()||`${b.symbol} ${b.name} ${b.business}`.toLowerCase().includes($('#search').value.trim().toLowerCase()));
   if(lane==='stress'){root.append(weatherPanel());companies=companies.filter(b=>b.stress_flags?.length);}
-  if(lane==='volatility'){companies=companies.filter(b=>['Unusual daily move','Movement picking up','Quiet stretch'].includes(b.movement));if(!companies.length)root.append(el('div','We need connected price history to screen for changing volatility. Company research is available on All companies; no imminent move is inferred from headlines.','empty'));}
+  if(lane==='volatility'){companies=companies.filter(b=>['Unusual daily move','Movement picking up','Quiet stretch'].includes(b.movement));if(!companies.length){root.append(el('div','Automatic volatility screening awaits computed daily-price statistics. Open a company below to see its interactive price chart and research.','empty'));for(const b of data.move_board||[])root.append(moveTile(b));}}
   for(const b of companies)root.append(moveTile(b));
  }
  $('#lanes').hidden=view!=='brief';renderIdeas();if(!root.childNodes.length)root.append(el('div',lane==='stress'?'No company funding flags are established in the available data. Market-wide crisis risk is still unknown.':'No matching company research is available. Try another search or check Data checks.','empty'));
@@ -189,11 +190,14 @@ async function searchDirectory(){
  const q=$('#search').value.trim(),version=++searchVersion,root=$('#directory-results');root.replaceChildren();if(!q)return;
  try{const result=await api('/api/directory?q='+encodeURIComponent(q));if(version!==searchVersion)return;
  root.append(el('p','Official company directory · select a company to research automatically'));
- for(const c of result.companies){const b=el('button',`${c.symbol} · ${c.name}${c.active?'':' · inactive'}`);b.disabled=!c.active;b.addEventListener('click',()=>openResearch(c.symbol));root.append(b);}
+ for(const c of result.companies){directoryCompanies[c.symbol]=c;const b=el('button',`${c.symbol} · ${c.name}${c.active?'':' · inactive'}`);b.disabled=!c.active;b.addEventListener('click',()=>openResearch(c.symbol));root.append(b);}
  if(!result.companies.length)root.append(el('p','No official SEC directory match. Global and private companies may not be covered.'));
  }catch(e){root.textContent=e.message;}
 }
 async function openResearch(symbol){
+ $('#company').hidden=false;$('#board').hidden=true;$('#company').replaceChildren();
+ const back=el('button','← Back to board');back.addEventListener('click',()=>{selected=null;render();});$('#company').append(back);
+ mountMarketChart($('#company'),companyDetails[symbol]?.company||directoryCompanies[symbol]||{symbol});
  $('#notice').textContent=`Researching ${symbol}: retrieving official filings and financial facts…`;$('#search').value='';$('#directory-results').replaceChildren();
  try{const job=await api('/api/research',{symbol});const result=await api('/api/company?symbol='+encodeURIComponent(symbol));
  companyDetails[symbol]=result;
@@ -228,7 +232,7 @@ function strategyCard(s){
 }
 function appendPriceHistory(root,h){
  const box=el('section',undefined,'price-history');box.append(el('h3','Price action history'));
- if(!h?.bars?.length){box.append(el('p',h?.reason||'No authorized price-history connection is configured. Company financial research remains available.'));root.append(box);return;}
+ if(!h?.bars?.length){const details=el('details');details.append(el('summary','Calculated daily-price statistics'),el('p','The interactive chart above provides visual price action. Calculated research statistics use a separate market-data connection.'),el('p',h?.reason||'Daily-price statistics are unavailable; financial analysis continues.'));box.replaceChildren(details);root.append(box);return;}
  box.append(el('p',`${h.provider} · ${h.feed} · ${h.currency} · ${h.cadence} · ${h.status==='stale'?'STALE CACHE · ':''}last session ${h.bars.at(-1).session}`),el('p',h.volume_scope),el('p',`Adjustments: ${h.adjustment} · retrieved ${date(h.retrieved_at)}`));
  const controls=el('div',undefined,'chart-controls'),chart=el('div');for(const [label,size]of [['1M',21],['3M',63],['6M',126],['1Y',252]]){const b=el('button',label);b.disabled=h.bars.length<size;b.addEventListener('click',()=>drawPriceChart(chart,h.bars.slice(-size)));controls.append(b);}
  box.append(controls,chart);drawPriceChart(chart,h.bars.slice(-Math.min(63,h.bars.length)));
