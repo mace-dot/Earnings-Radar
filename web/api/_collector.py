@@ -83,7 +83,7 @@ def collect_company(fetch,symbol,cik):
     rows=[];data=fetch.json(f'https://data.sec.gov/submissions/CIK{cik}.json');recent=data.get('filings',{}).get('recent',{})
     for i,pid in enumerate(recent.get('accessionNumber',[])[:25]):
         form=recent['form'][i]
-        if form not in ('8-K','8-K/A','10-Q','10-Q/A','10-K','10-K/A'):continue
+        if form not in ('8-K','8-K/A','10-Q','10-Q/A','10-K','10-K/A','20-F','20-F/A','6-K','40-F'):continue
         doc=recent['primaryDocument'][i]
         if not re.fullmatch(r'\d{10}-\d{2}-\d{6}',pid) or not re.fullmatch(r'[A-Za-z0-9_.-]+',doc):continue
         pub=datetime.fromisoformat(recent['acceptanceDateTime'][i].replace('Z','+00:00'))
@@ -91,6 +91,8 @@ def collect_company(fetch,symbol,cik):
         if pub>datetime.now(timezone.utc):continue
         url=f'https://www.sec.gov/Archives/edgar/data/{int(cik)}/{pid.replace("-","")}/{doc}'
         meta={'form':form,'cik':cik,'report_date':recent.get('reportDate',['']*len(recent['form']))[i]}
+        meta['company_name']=data.get('name',symbol)
+        meta['former_names']=[n['name'] for n in data.get('formerNames',[]) if n.get('name')][:20]
         if len(rows)<2:
             try:meta['excerpts']=excerpts(fetch.get(url,20_000_000))
             except CollectionError as exc:meta['document_error']=str(exc)
@@ -136,6 +138,8 @@ def collect_feed(fetch,name,url):
     return rows
 
 def resolve_symbol(store,symbol):
+    official=store.request('radar_universe',query='select=cik,active&symbol=eq.'+symbol+'&limit=1')
+    if official and official[0]['active']:return official[0]['cik']
     if symbol in CIKS:return CIKS[symbol]
     configured=json.loads(os.getenv('RADAR_CIK_MAP','{}'))
     if symbol in configured and re.fullmatch(r'\d{10}',configured[symbol]):return configured[symbol]

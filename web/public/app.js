@@ -59,9 +59,11 @@ function trend(root,symbol){
  const max=Math.max(...series.map(e=>e.evidence_meta.value));if(!(max>0))return;
  series.forEach((e,i)=>{const h=Math.max(0,e.evidence_meta.value/max*150),x=30+i*110;const bar=document.createElementNS(svg.namespaceURI,'rect');bar.setAttribute('x',x);bar.setAttribute('y',170-h);bar.setAttribute('width',70);bar.setAttribute('height',h);bar.setAttribute('fill','#a5f0ba');const title=document.createElementNS(svg.namespaceURI,'title');title.textContent=`${e.evidence_meta.end}: $${Number(e.evidence_meta.value).toLocaleString()}`;bar.append(title);svg.append(bar);const label=document.createElementNS(svg.namespaceURI,'text');label.setAttribute('x',x);label.setAttribute('y',195);label.setAttribute('fill','#a8bab0');label.textContent=e.evidence_meta.end.slice(0,4);svg.append(label);});root.append(svg,el('p','Reported annual revenue; hover over a bar for the value. Dates are fiscal period ends, not earnings forecasts.'));
 }
-function showCompany(symbol){
+function showCompany(symbol,ready=false){
+ if(!ready){openResearch(symbol);return;}
  selected=symbol;$('#board').hidden=true;$('#company').hidden=false;const root=$('#company');root.replaceChildren();
  const back=el('button','← Back to board');back.addEventListener('click',()=>{selected=null;render();});root.append(back,el('h2',`${symbol} · Research dossier`));
+ appendAssistant(root,symbol);
  const mine=watchlist.includes(symbol),add=el('button',mine?'Saved to watchlist':'Save to my watchlist');add.disabled=mine;add.addEventListener('click',()=>saveStock(symbol));root.append(add);
  root.append(el('h3','Business performance','label'));trend(root,symbol);
  const ratios=data.financial_context[symbol]||[];
@@ -74,11 +76,19 @@ function showCompany(symbol){
  if(!records.length)root.append(el('p','No company evidence yet. Save this stock and run collection; queued coverage is bounded.'));
 }
 function render(){
- renderIdeas();if(selected){showCompany(selected);return;}const root=$('#board');root.hidden=false;$('#company').hidden=true;root.replaceChildren();const records=filtered();
+ renderIdeas();if(selected){showCompany(selected,true);return;}const root=$('#board');root.hidden=false;$('#company').hidden=true;root.replaceChildren();const records=filtered();
  if(view==='watchlist'){
   heading('Your watchlist',user?'Saved stocks feed the autonomous collector. Company coverage rotates through a bounded universe.':'Sign in to save a private watchlist. These companies have public research coverage.');
   const form=el('form',undefined,'watch-add'),input=el('input');input.placeholder='Add ticker, e.g. TSLA';input.maxLength=10;input.required=true;input.setAttribute('aria-label','Stock ticker');const button=el('button','Save stock');form.append(input,button);form.addEventListener('submit',e=>{e.preventDefault();saveStock(input.value.trim().toUpperCase());});root.append(form);
-  const symbols=user?watchlist:['AAPL','MSFT','NVDA'];for(const s of symbols){const b=(data.move_board||[]).find(x=>x.symbol===s);root.append(b?moveTile(b):stockCard(s,Boolean(user)));}if(!symbols.length)root.append(el('p','Your saved watchlist is empty. Add a stock to request backend coverage.'));
+  const symbols=user?watchlist:(data.move_board||[]).map(b=>b.symbol);for(const s of symbols){const b=(data.move_board||[]).find(x=>x.symbol===s);root.append(b?moveTile(b):stockCard(s,Boolean(user)));}if(!symbols.length)root.append(el('p','Your saved watchlist is empty. Add a stock to request backend coverage.'));
+ }else if(view==='discover'){
+ heading('Discover companies','The scanner finds recent official disclosures automatically. Filing activity is a research lead, not a predicted price move.');
+ const scan=data.status[0]?.payload?.discovery;
+ root.append(el('p',scan?.date?`SEC daily index: ${scan.date}`:'Daily discovery has not completed yet.'));
+ for(const c of scan?.candidates||[]){const n=el('article',undefined,'card');n.append(el('h2',c.symbol),el('p',`${c.name} · ${c.discovery_form} filed ${c.discovery_date}`));const b=el('button','Research this company');b.addEventListener('click',()=>openResearch(c.symbol));n.append(b);root.append(n);}
+ }else if(view==='track'){
+ heading('Track record','Immutable research snapshots record what was known. No validated price forecasts or trading win rate are available yet.');
+ loadTrack(root);
  }else if(view==='sources'){
   heading('Actual source health','Working integrations retrieve evidence. Licensed and unsupported entries are access requirements, not connected feeds.');
   for(const s of data.source_health||[]){const n=el('article',undefined,'card');n.append(el('h2',s.name),el('div',s.integration_status,'badge'),el('p',`${s.records} retained records · Last successful collection ${date(s.last_success)}`),el('p',s.capabilities||''));const age=s.last_success?(Date.now()-new Date(s.last_success))/3600000:Infinity;if(s.integration_status==='working integration'&&age>36)n.append(el('p','STALE: the last successful collection is over 36 hours old.'));list(n,'Current collection issues',s.errors);n.append(sourceLink(s.documentation_url,'Access documentation'));root.append(n);}
@@ -106,7 +116,7 @@ async function saveStock(symbol){if(!user){$('#account').hidden=false;$('#auth-m
 async function load(){const b=$('#refresh');b.disabled=true;try{data=await api('/api/dashboard');$('#count').textContent=(data.move_board||[]).length;$('#stress-count').textContent=(data.move_board||[]).filter(b=>b.stress_flags?.length).length;$('#candidate-count').textContent=latest(data.events.filter(e=>e.research?.ranking?.eligible_weekly)).length;const s=data.status[0];$('#freshness').textContent=s?`Research updated ${date(s.updated_at)} · daily updates, rotating company coverage`:'Awaiting first collection';const errors=s?.payload?.jobs?.filter(j=>j.last_error)||[];$('#notice').textContent=errors.length?`Some data feeds are unavailable. Open Data checks to see what is connected.`:'';}catch(e){$('#notice').textContent=e.message;$('#freshness').textContent='Research connection unavailable';}finally{render();b.disabled=false;}}
 async function signIn(action){const b=$('#auth-form button');b.disabled=true;try{const r=await api('/api/session',{action,email:$('#email').value.trim(),password:$('#password').value});$('#password').value='';$('#auth-message').textContent=r.confirmation_required?'Check your email to confirm the account, then sign in.':'Signed in. Your watchlist is saved privately.';await loadSession();render();}catch(e){$('#auth-message').textContent=e.message;}finally{b.disabled=false;}}
 $('#auth-form').addEventListener('submit',e=>{e.preventDefault();signIn('login');});$('#signup').addEventListener('click',()=>{if($('#auth-form').reportValidity())signIn('signup');});$('#logout').addEventListener('click',async()=>{await api('/api/session',{action:'logout'});ideas=[];await loadSession();render();});$('#account-toggle').addEventListener('click',()=>{$('#account').hidden=!$('#account').hidden;});
-document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;selected=null;document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));render();}));$('#search').addEventListener('input',()=>{selected=null;render();});$('#refresh').addEventListener('click',load);
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{view=b.dataset.view;selected=null;document.querySelectorAll('[data-view]').forEach(x=>x.classList.toggle('active',x===b));render();}));$('#search').addEventListener('input',()=>{selected=null;render();clearTimeout(searchTimer);searchTimer=setTimeout(searchDirectory,300);});$('#refresh').addEventListener('click',load);
 $('#collect').addEventListener('click',async()=>{if(!user){$('#account').hidden=false;$('#auth-message').textContent='Sign in to request a collection refresh.';return;}const b=$('#collect');b.disabled=true;$('#notice').textContent='Collecting official evidence. This can take a few minutes…';try{const result=await api('/api/collect',{});await load();$('#notice').textContent=result.status==='cooldown_or_running'?'Collection is already running or within its 15-minute cooldown.':`Collection completed: ${result.records} records retrieved. Check Source health for partial failures.`;}catch(e){$('#notice').textContent=e.message;}finally{b.disabled=false;}});
 Promise.all([load(),loadSession()]).then(render);
 
@@ -154,7 +164,7 @@ document.querySelectorAll('[data-lane]').forEach(b=>b.addEventListener('click',(
 $('#terms-toggle').addEventListener('click',()=>{$('#terms').hidden=!$('#terms').hidden;$('#terms-toggle').setAttribute('aria-expanded',String(!$('#terms').hidden));});
 
 function compactMoney(v){if(!Number.isFinite(v))return'Unavailable';const sign=v<0?'-':'';const n=Math.abs(v);return sign+'$'+(n>=1e9?(n/1e9).toFixed(1)+'B':n>=1e6?(n/1e6).toFixed(1)+'M':n.toLocaleString());}
-$('#option-math').addEventListener('submit',e=>{
+$('#option-math')?.addEventListener('submit',e=>{
  e.preventDefault();try{
   const fields=['strike','premium','quantity','target'];if(fields.some(k=>!$('#option-'+k).value.trim()))throw new Error('Enter every value from your option quote or hypothetical scenario.');
   const input=Object.fromEntries(fields.map(k=>[k,Number($('#option-'+k).value)]));input.type=$('#option-type').value;
@@ -163,3 +173,29 @@ $('#option-math').addEventListener('submit',e=>{
 });
 
 $('#lineup-mobile').addEventListener('click',()=>$('#idea-panel').scrollIntoView?.({behavior:'smooth',block:'start'}));
+
+let searchTimer, searchVersion=0;
+async function searchDirectory(){
+ const q=$('#search').value.trim(),version=++searchVersion,root=$('#directory-results');root.replaceChildren();if(!q)return;
+ try{const result=await api('/api/directory?q='+encodeURIComponent(q));if(version!==searchVersion)return;
+ root.append(el('p','Official company directory · select a company to research automatically'));
+ for(const c of result.companies){const b=el('button',`${c.symbol} · ${c.name}${c.active?'':' · inactive'}`);b.disabled=!c.active;b.addEventListener('click',()=>openResearch(c.symbol));root.append(b);}
+ if(!result.companies.length)root.append(el('p','No official SEC directory match. Global and private companies may not be covered.'));
+ }catch(e){root.textContent=e.message;}
+}
+async function openResearch(symbol){
+ $('#notice').textContent=`Researching ${symbol}: retrieving official filings and financial facts…`;$('#search').value='';$('#directory-results').replaceChildren();
+ try{const job=await api('/api/research',{symbol});const result=await api('/api/company?symbol='+encodeURIComponent(symbol));
+ const ids=new Set(result.events.map(e=>e.id));data.events=[...result.events,...data.events.filter(e=>!ids.has(e.id))];Object.assign(data.financial_context,result.financial_context);
+ data.move_board=[...(result.move_board||[]),...(data.move_board||[]).filter(b=>b.symbol!==symbol)];
+ $('#notice').textContent=`${symbol}: ${job.status}. ${result.events.length} retained evidence records. Options decision: WAIT until required market inputs are connected.`;if(result.events.length)showCompany(symbol,true);else{$('#company').hidden=false;$('#board').hidden=true;$('#company').replaceChildren(el('h2',symbol),el('p',`Research status: ${job.status}. No supported company evidence retrieved yet. Try again after the retry interval.`));}
+ }catch(e){$('#notice').textContent=e.message;}
+}
+function appendAssistant(root,symbol){
+ const box=el('section',undefined,'card');box.append(el('h3','Ask your research assistant'),el('p','Answers explain collected evidence in plain language. Current engine: evidence rules; no forecasting AI model is connected.'));
+ const form=el('form'),input=el('input'),button=el('button','Explain');input.placeholder='What changed? What are the cash risks?';input.maxLength=400;input.required=true;input.setAttribute('aria-label','Company research question');form.append(input,button);const output=el('div');output.setAttribute('role','status');
+ form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;output.textContent='Reading the evidence…';try{const result=await api('/api/assistant',{symbol,question:input.value});output.replaceChildren(el('p',result.answer),el('p',result.engine));for(const c of result.citations||[])output.append(sourceLink(c.url,c.quote));list(output,'What would change this assessment',result.invalidation);list(output,'Still missing',result.missing);}catch(err){output.textContent=err.message;}finally{button.disabled=false;}});box.append(form,output);root.append(box);
+}
+async function loadTrack(root){
+ try{const result=await api('/api/track-record');if(view!=='track')return;root.append(el('p',result.forecast_status));for(const r of result.snapshots){const n=el('article',undefined,'card');n.append(el('h2',r.symbol),el('p',date(r.created_at)),el('p',`Decision: ${r.payload.action.toUpperCase()} · ${r.payload.source_ids.length} source records · ${r.engine_version}`),el('p',r.payload.summary?.changed||'Research evidence saved for later comparison.'));const b=el('button','Open company');b.addEventListener('click',()=>openResearch(r.symbol));n.append(b);root.append(n);}if(!result.snapshots.length)root.append(el('p','The first completed research job will create a snapshot.'));}catch(e){root.append(el('p',e.message));}
+}

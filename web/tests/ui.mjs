@@ -7,7 +7,7 @@ const event={id:'a'.repeat(64),provider:'sec_fundamentals',provider_event_id:'a'
 const payload={events:[event],status:[{updated_at:'2026-10-06T00:00:00Z',payload:{jobs:[],cadence:'daily_scheduled'}}],weekly:[event.id],financial_context:{AAPL:[]},source_health:[{id:'wsj',name:'Wall Street Journal',integration_status:'licensed access required',records:0,errors:[],documentation_url:'https://www.wsj.com'}]};
 payload.move_board=[{symbol:'AAPL',name:'Apple',evidence_id:event.id,business:'Profit improved, but cash conversion needs checking.',business_signal:'Business growing',movement:'Price data needed',movement_note:'Price history is not connected.',stress_flags:[],catalyst:'Date not confirmed.'}];
 const calls=[];
-const sandbox={document,window,URL,Date,console,setTimeout,fetch:async(path,options)=>{calls.push({path,options});let d=path==='/api/dashboard'?payload:path==='/api/session'?{user:null}:{watchlist:[]};if(options&&path==='/api/session')return{ok:false,json:async()=>({error:'Sign in'})};return{ok:true,json:async()=>d};}};
+const sandbox={document,window,URL,Date,console,setTimeout,fetch:async(path,options)=>{calls.push({path,options});let d=path==='/api/dashboard'||path.startsWith('/api/company')?payload:path==='/api/research'?{status:'cached'}:path==='/api/session'?{user:null}:{watchlist:[]};if(options&&path==='/api/session')return{ok:false,json:async()=>({error:'Sign in'})};return{ok:true,json:async()=>d};}};
 vm.runInNewContext(readFileSync(new URL('../public/options.js',import.meta.url),'utf8'),sandbox);
 vm.runInNewContext(readFileSync(new URL('../public/app.js',import.meta.url),'utf8'),sandbox);
 await new Promise(resolve=>setTimeout(resolve,30));
@@ -23,6 +23,7 @@ document.querySelector('[data-view="sources"]').dispatchEvent(new window.Event('
 assert.match(document.querySelector('#board').textContent,/licensed access required/);
 document.querySelector('[data-view="brief"]').dispatchEvent(new window.Event('click'));
 document.querySelector('.detail-button').dispatchEvent(new window.Event('click'));
+await new Promise(resolve=>setTimeout(resolve,30));
 assert.match(document.querySelector('#company').textContent,/AAPL.*Research dossier/);
 assert.match(document.querySelector('#company').textContent,/Price-history statistics are unavailable/);
 document.querySelector('#collect').dispatchEvent(new window.Event('click'));
@@ -43,3 +44,29 @@ const scenario=vm.runInNewContext("optionScenario({type:'call',strike:100,premiu
 const put=vm.runInNewContext("optionScenario({type:'put',strike:100,premium:2,quantity:2,target:90})",sandbox);assert.equal(put.profitLoss,1600);assert.equal(put.maxLoss,400);
 assert.throws(()=>vm.runInNewContext("optionScenario({type:'call',strike:100,premium:2,quantity:1.5,target:105})",sandbox));
 assert.equal(vm.runInNewContext("optionScenario({type:'call',strike:100,premium:2,quantity:1,target:99}).profitLoss",sandbox),-200);
+// Broad search requests server identifiers rather than filtering the original board.
+sandbox.fetch=async(path,options)=>{
+ calls.push({path,options});
+ const d=path.startsWith('/api/directory')?{companies:[{symbol:'TSLA',name:'Tesla, Inc.',active:true}]}:
+ path==='/api/research'?{status:'complete'}:
+ path.startsWith('/api/company')?{events:[{...event,tickers:['TSLA']}],financial_context:{TSLA:[]},move_board:[]}:
+ path==='/api/assistant'?{engine:'deterministic evidence assistant',answer:'Cash risks require matched-period evidence.',citations:[{url:'https://www.sec.gov/test',quote:'Reported cash'}],missing:['Option quotes'],invalidation:[]}:
+ path==='/api/track-record'?{forecast_status:'No validated forecasts.',snapshots:[]}:{watchlist:[]};
+ return{ok:true,json:async()=>d};
+};
+sandbox.clearTimeout=clearTimeout;
+document.querySelector('#search').value='Tesla';
+document.querySelector('#search').dispatchEvent(new window.Event('input'));
+await new Promise(resolve=>setTimeout(resolve,350));
+assert.match(document.querySelector('#directory-results').textContent,/TSLA.*Tesla/);
+document.querySelector('#directory-results button').dispatchEvent(new window.Event('click'));
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.match(document.querySelector('#company').textContent,/TSLA.*Research dossier/);
+assert.ok(calls.some(c=>c.path==='/api/research'&&JSON.parse(c.options.body).symbol==='TSLA'));
+const form=document.querySelector('#company form');form.querySelector('input').value='What are the cash risks?';form.dispatchEvent(new window.Event('submit'));
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.match(document.querySelector('#company').textContent,/Cash risks require matched-period evidence/);
+document.querySelector('[data-view="track"]').dispatchEvent(new window.Event('click'));
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.match(document.querySelector('#board').textContent,/No validated forecasts/);
+console.log('Autonomous UI smoke passed: name search, automatic research, cited assistant and honest track record');

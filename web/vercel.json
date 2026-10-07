@@ -22,6 +22,26 @@
     {
       "source": "/api/ideas",
       "destination": "/api/index?route=ideas"
+    },
+    {
+      "source": "/api/directory",
+      "destination": "/api/index?route=directory"
+    },
+    {
+      "source": "/api/company",
+      "destination": "/api/index?route=company"
+    },
+    {
+      "source": "/api/research",
+      "destination": "/api/index?route=research"
+    },
+    {
+      "source": "/api/assistant",
+      "destination": "/api/index?route=assistant"
+    },
+    {
+      "source": "/api/track-record",
+      "destination": "/api/index?route=track-record"
     }
   ],
   "headers": [

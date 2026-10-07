@@ -12,6 +12,9 @@ sys.path.insert(0,str(Path(__file__).parent))
 from _store import Store,StoreError
 from _auth import current_user,auth_request,AuthError,cookie
 from _collector import run,resolve_symbol,CollectionError
+from _directory import search as directory_search
+from _orchestrator import company,request_research,background
+from _assistant import answer as company_answer
 
 class handler(BaseHTTPRequestHandler):
     def respond(self,status,payload,cookies=()):
@@ -24,6 +27,12 @@ class handler(BaseHTTPRequestHandler):
         path='/api/'+parse_qs(urlsplit(self.path).query)['route'][0] if 'route' in parse_qs(urlsplit(self.path).query) else urlsplit(self.path).path
         try:
             store=Store()
+            params=parse_qs(urlsplit(self.path).query)
+            if path=='/api/directory':return self.respond(200,{'companies':directory_search(store,params.get('q',[''])[0])})
+            if path=='/api/company':return self.respond(200,company(store,params.get('symbol',[''])[0].upper()))
+            if path=='/api/track-record':
+                rows=store.request('radar_research_snapshots',query='select=*&order=created_at.desc&limit=50')
+                return self.respond(200,{'snapshots':rows,'forecast_status':'No validated predictive model has issued forecasts; outcomes require market prices.'})
             if path in ('/api/dashboard','/api/index','/api/index.py'):return self.respond(200,store.dashboard())
             if path=='/api/session':
                 try:user=current_user(store,self.headers.get('Cookie'));return self.respond(200,{'user':{'id':user['id'],'email':user.get('email')}})
@@ -39,9 +48,10 @@ class handler(BaseHTTPRequestHandler):
             if path=='/api/collect':
                 secret=os.getenv('CRON_SECRET','')
                 if not secret or not hmac.compare_digest(self.headers.get('Authorization',''),'Bearer '+secret):return self.respond(401,{'error':'Scheduled collector authorization required'})
-                return self.respond(200,run(store))
+                return self.respond(200,background(store))
             return self.respond(404,{'error':'Unknown endpoint'})
         except AuthError as exc:self.respond(401,{'error':str(exc)})
+        except ValueError as exc:self.respond(400,{'error':str(exc)})
         except StoreError as exc:self.respond(503,{'error':str(exc),'events':[],'status':[]})
         except Exception:self.respond(503,{'error':'Service temporarily unavailable; check deployment logs'})
     def do_POST(self):
@@ -53,6 +63,8 @@ class handler(BaseHTTPRequestHandler):
             if not 0<size<=16000:return self.respond(400,{'error':'Invalid request size'})
             payload=json.loads(self.rfile.read(size));path='/api/'+parse_qs(urlsplit(self.path).query)['route'][0] if 'route' in parse_qs(urlsplit(self.path).query) else urlsplit(self.path).path;store=Store()
             if not isinstance(payload,dict):return self.respond(400,{'error':'JSON object required'})
+            if path=='/api/research':return self.respond(200,request_research(store,str(payload.get('symbol','')).upper()))
+            if path=='/api/assistant':return self.respond(200,company_answer(store,str(payload.get('symbol','')).upper(),payload.get('question','')))
             if path=='/api/session':
                 action=payload.get('action')
                 if action=='logout':return self.respond(200,{'user':None},[cookie('radar_session','',0),cookie('radar_refresh','',0)])

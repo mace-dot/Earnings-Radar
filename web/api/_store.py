@@ -16,10 +16,10 @@ class Store:
             raise StoreError('Database connection is not configured')
 
     def request(self, table, *, query='', rows=None, conflict='id', ignore=False, method=None):
-        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas'}:
+        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas', 'radar_universe', 'radar_research_queue', 'radar_research_snapshots', 'radar_model_cache'}:
             raise ValueError('Unknown table')
         if rows is not None:
-            query = 'on_conflict=' + conflict
+            if method not in ('PATCH',):query = 'on_conflict=' + conflict
         headers = {'apikey': self.key, 'Content-Type': 'application/json',
                    'Prefer': ('resolution=ignore-duplicates' if ignore else 'resolution=merge-duplicates') + ',return=minimal'}
         if not self.key.startswith('sb_secret_'):
@@ -55,13 +55,17 @@ class Store:
             from ._board import company_board
         except ImportError:
             from _board import company_board
+        boards=company_board(events,contexts,status[0]['payload'] if status else {})
+        for b in boards:
+            directory=self.request('radar_universe',query='select=name&symbol=eq.'+b['symbol']+'&limit=1')
+            if directory:b['name']=directory[0]['name']
         return {'events':events,'status':status,'financial_context':contexts,
-                'move_board':company_board(events,contexts,status[0]['payload'] if status else {}),
+                'move_board':boards,
                 'weekly': [e['id'] for e in events if e['research']['ranking']['eligible_weekly']][:5],
                 'source_health': self.source_health(events,status)}
 
     def rpc(self, name, payload):
-        if name != 'radar_claim_collection': raise ValueError('Unknown RPC')
+        if name not in {'radar_claim_collection','radar_enqueue','radar_claim_research','radar_finish_research','radar_reserve_model_call','radar_search_directory'}: raise ValueError('Unknown RPC')
         headers={'apikey':self.key,'Content-Type':'application/json'}
         if not self.key.startswith('sb_secret_'):headers['Authorization']='Bearer '+self.key
         try:
