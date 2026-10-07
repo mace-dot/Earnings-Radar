@@ -214,3 +214,10 @@ Earlier Render/Streamlit hosting documentation is retained for historical refere
 The replacement Next.js app is in `apps/web` and the scheduled Python engine is in `engine`.
 See [master implementation setup](docs/MASTER_IMPLEMENTATION.md), [actual progress and blockers](docs/PROGRESS.md), and [the adopted master plan](docs/MASTER_PLAN.md).
 The existing `web` deployment is preserved until the replacement passes the release criteria.
+
+
+### Move Engine update
+
+The board now uses the connected upcoming calendar instead of a fixed seed list. Company pages can request automated research and refresh the latest observed IEX trade. `/moves` screens observed volatility compression; it does not publish calibrated move probabilities. News and community opinions retain source and timing, with bounded sampling disclosed.
+
+Run `python -m engine.run doctor`, then `calendar`, `sectors`, `prices`, `score`, `queue`, or `context --symbols MU`. The missing Alpha Vantage free key blocks historical earnings backfill. Review [Move Engine progress](docs/PROGRESS.md) for actual acceptance results and the [new technical plan](docs/MOVE_ENGINE_PLAN.md).

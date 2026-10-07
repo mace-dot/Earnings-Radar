@@ -21,6 +21,9 @@ TABLES = {
     "model_registry",
     "model_portfolio_trades",
     "engine_runs",
+    "score_queue",
+    "market_observations",
+    "forum_posts",
 }
 
 
@@ -42,6 +45,17 @@ class Store:
         self, table: str, params: dict[str, str] | None = None
     ) -> list[dict[str, Any]]:
         return self._request(table, params=params or {"select": "*", "limit": "1000"})
+
+    def pages(
+        self, table: str, params: dict[str, str], capacity: int = 20000
+    ) -> list[dict[str, Any]]:
+        output = []
+        for offset in range(0, capacity, 1000):
+            rows = self.read(table, {**params, "limit": "1000", "offset": str(offset)})
+            output.extend(rows)
+            if len(rows) < 1000:
+                return output
+        raise RuntimeError("Pagination exceeded capacity; do not silently truncate")
 
     def write(
         self,
@@ -68,3 +82,26 @@ class Store:
         if not response.is_success:
             raise RuntimeError(f"Database operation failed ({response.status_code})")
         return response.json() if response.content else []
+
+    def rpc(self, name: str, payload: dict[str, Any]) -> Any:
+        if name not in {"radar_request_score", "radar_claim_scores"}:
+            raise ValueError("Unknown RPC")
+        response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)
+        if not response.is_success:
+            raise RuntimeError(f"Queue operation failed ({response.status_code})")
+        return response.json()
+
+    def finish_score(self, symbol: str, reason: str | None = None) -> None:
+        from datetime import datetime, timezone
+
+        self._request(
+            "score_queue",
+            method="PATCH",
+            params={"symbol": f"eq.{symbol}"},
+            json={
+                "state": "failed" if reason else "completed",
+                "reason": reason,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "leased_until": None,
+            },
+        )

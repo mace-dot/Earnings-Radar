@@ -97,8 +97,8 @@ class Finnhub:
     def __init__(self) -> None:
         key = (
             os.getenv("FINNHUB_API_KEY")
-            or os.getenv("FINNHUB")
             or os.getenv("FINN_HUB")
+            or os.getenv("FINNHUB")
         )
         if not key:
             raise RuntimeError("Finnhub calendar credential missing")

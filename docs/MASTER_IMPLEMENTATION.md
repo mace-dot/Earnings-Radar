@@ -52,3 +52,23 @@ Current jobs: directory, calendar, daily prices, price-feature scoring. Options 
 ## Validation limits
 
 The walk-forward challenger is code tested on labeled synthetic fixtures, not a trained real historical model. It returns Brier/log loss/reliability but does not calibrate or promote itself. Rule case text is a template; business claims are conditional hypotheses, not sourced deep-research conclusions. There are no validated probabilities, live option selections, public trading performance, AI provider calls, or broker orders in this foundation.
+
+## Move Engine update
+
+`docs/MOVE_ENGINE_PLAN.md` is now the active technical extension. The direct `FINN_HUB` credential works; no replacement Finnhub key is needed. Alpha Vantage historical earnings and cross-check still need a free key.
+
+New jobs:
+
+```bash
+python -m engine.run doctor
+python -m engine.run calendar
+python -m engine.run sectors
+python -m engine.run prices
+python -m engine.run score
+python -m engine.run queue
+python -m engine.run context --symbols MU
+```
+
+Apply additive migrations 009, 010 and 011 in order (already applied to the existing project). The worker uses calendar-driven scope. The queue is serviced by the five-minute GitHub schedule when its secrets are available. Existing API integration cannot manage those secrets (HTTP 403), even though Git and Actions run metadata work.
+
+To switch production **after acceptance**: Vercel → earnings-radar → Settings → Build and Deployment → Root Directory `apps/web`; Framework `Next.js`; Install `npm ci`; Build `npm run build`; Output `.next` (or framework default), then redeploy `main`. Preserve server env values for Supabase and Alpaca. The existing production root was not switched by this update.

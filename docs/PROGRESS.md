@@ -41,3 +41,53 @@ Pushed implementation to GitHub main. Vercel preview READY, authenticated viewin
 An additional guard caught a still-forming daily bar; ingestion now excludes incomplete sessions, the ten erroneous new-schema rows were removed, and scoring succeeded again. A provider regression test covers this case. Existing research data was preserved.
 
 Environment install/start instructions saved as a draft using the onboarding skill. Saving did not publish or apply the draft; review/save/publish in Environment settings is required for future-session reuse.
+
+# Move Engine implementation
+
+This section supersedes earlier connection diagnoses where new probes establish otherwise.
+
+## Diagnosis fixes (§0)
+
+- [x] Removed default seed-only scoring; scope comes from calendar, existing research and requested symbols.
+- [x] Working Finnhub binding found (`FINN_HUB`); imported 1,361 calendar entries. Alpha Vantage fallback remains unavailable.
+- [x] Upcoming calendar-sector coverage: 1,361 entries, 96.03% SIC-derived sectors. Micron classified from SIC 3674.
+- [x] Distinct numeric BULL/BEAR and MORE/LESS evidence templates; missing inputs remain explicit.
+- [x] Indicative option estimates allowed, separate from executable quotes.
+- [ ] Actual trained magnitude model, validated probabilities and EV-ranked picks.
+- [ ] Switch production root after release acceptance; protected new-app preview used meanwhile.
+
+## Acceptance tests (§8)
+
+- [x] Provider doctor implemented and run: Supabase, SEC, Alpaca prices/options, Finnhub work; Alpha Vantage key missing.
+- [x] Live SQL audit: 1,361 entries dated today through +60 days; sector coverage 96.03%.
+- [x] Micron scored by a real queue cycle; mocked queue-cycle regression added. GitHub scheduled worker credentials still unverified.
+- [x] Hand-calculated implied move tests and event-variance unit test.
+- [ ] >=20,000 historical report events; Alpha Vantage credential absent; Finnhub 2019 probe returned zero entries. Point-in-time rejection tests pass.
+- [ ] Magnitude model beats baselines out of sample; no trained model or probability claimed.
+- [x] Every generated side differs and includes real measured numbers or explicit observed sample counts.
+- [ ] Every liquid prop has a complete concrete structure; indicative paired-straddle estimate exists, other structures incomplete.
+- [ ] Full MORE → concrete event straddle → lineup Playwright acceptance. Micron has no event-matched estimate, so its general option range is labeled accordingly.
+
+## User-visible improvements
+
+- Durable scoring queue, bounded atomic claims, three-attempt lease recovery and request deduplication.
+- Actual IEX observed-trade refresh while a company page is open; shared 15-second provider lease. Browser refresh 30 seconds; quote timestamp always visible.
+- Real Alpaca headlines and bounded Stocktwits community sample stored with publication/retrieval times.
+- Observed compression screen; no fake Move Meter, probability or historical success rate.
+- Historical earnings adapter and empirical event-move helpers added, but historical data prerequisites are not met.
+- Calendar-driven price batch imported 324,637 bars covering 1,146 symbols. No-price symbols remain explicitly unavailable rather than fabricated.
+
+## Automation limitation
+
+GitHub Actions run metadata is readable, but configuring Actions secrets returns HTTP 403 `Resource not accessible by integration`. A five-minute queue workflow is committed; its runtime credentials and successful execution must be verified separately. A manual queue cycle does not prove continuous collection.
+
+## Move Engine release verification
+
+- 324,637 completed-session bars / 1,146 covered symbols; 8,226 lines / 1,371 attempted symbols. 225 have no bars in this feed, and show missing-data reasons.
+- Browser tests pass for existing board flow, Micron's distinct BULL/BEAR and MORE/LESS panels, actual market-price relay and cross-origin rejection. This does not satisfy the event-specific concrete-straddle acceptance: MU has no event-matched estimate.
+- Magnitude challenger code added: annual outer test, previous-year Platt calibration, earlier training, median/80th-percentile regression. Fixture validation only; no real model promotion.
+- Original Python tests (118), engine tests (34), frontend tests (5), production build/type/lint/format and connected-database Chromium tests (3) pass locally.
+- Alpha Vantage free key requirement saved in Environment draft; no value supplied. Draft save does not publish/apply it.
+- Quote polling requests one latest IEX trade every 30 seconds while the stock page is open. Heavy statistics are computed by engine jobs; this is not full-market streaming coverage.
+
+Remaining: historical dataset/backfill credential, true fundamentals/estimate revisions/short-interest features, validated prediction/EV pipeline, complete multi-leg structures and automatic publish/grade/paper portfolio, alert opt-in/dispatch, and successful scheduled worker verification. No paid service activated, no trades placed, no unsupported probability shown.
