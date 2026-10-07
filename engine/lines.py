@@ -2,8 +2,9 @@
 
 from datetime import datetime, timedelta
 from typing import Any
+from engine.evidence import directional_cases, magnitude_cases
 
-KINDS = ("Run-Up", "Earnings Move", "Post-Earnings Drift", "Volatility", "Swing")
+KINDS = ("Run-Up", "Earnings Move", "Direction", "IV Ramp", "Drift", "Swing")
 
 
 def build_lines(
@@ -11,18 +12,25 @@ def build_lines(
     feature: dict[str, Any],
     as_of: datetime,
     event: dict[str, Any] | None = None,
+    option_estimate: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     lines, sides = [], []
     momentum = feature.get("return_20")
     last = feature.get("last_close")
     atr = feature.get("atr_14")
     for kind in KINDS:
+        magnitude = kind in {"Earnings Move", "IV Ramp"}
+        cases = (
+            magnitude_cases(feature, option_estimate)
+            if magnitude
+            else directional_cases(feature)
+        )
         missing = []
         if kind != "Swing" and not event:
             missing.append("Earnings date missing")
-        if kind in ("Earnings Move", "Volatility"):
+        if kind in ("Earnings Move", "IV Ramp", "Direction"):
             missing.append("Executable option quotes missing")
-        if kind == "Post-Earnings Drift":
+        if kind == "Drift":
             missing.append("Verified earnings surprise missing")
         if kind == "Run-Up":
             missing.append("Event-history sample missing")
@@ -35,7 +43,7 @@ def build_lines(
                 else "Conflicting dates"
             )
         badges = [*missing, "Model not validated"]
-        if feature.get("feed", "").startswith("iex"):
+        if (feature.get("feed") or "").startswith("iex"):
             badges.append("Partial market feed")
         report = event["report_date"] if event else "date unconfirmed"
         line_id = f"{symbol}:{kind}:{as_of.date().isoformat()}"
@@ -58,8 +66,8 @@ def build_lines(
                 "source": "rules-v1",
                 "payload": {
                     "subtitle": (
-                        "BULL: volatility rises · BEAR: volatility falls"
-                        if kind == "Volatility"
+                        "MORE: larger move · LESS: smaller move"
+                        if magnitude
                         else f"Report: {report}"
                     ),
                     "favored": favored,
@@ -67,9 +75,8 @@ def build_lines(
                 },
             }
         )
-        for side in ("BULL", "BEAR"):
+        for side in (("MORE", "LESS") if magnitude else ("BULL", "BEAR")):
             upward = side == "BULL"
-            direction = "rise" if upward else "fall"
             stop = (
                 round(last - 1.5 * atr, 2)
                 if last is not None and atr is not None and upward
@@ -103,20 +110,39 @@ def build_lines(
                 ),
                 "missing": list(dict.fromkeys(trade_missing)),
             }
-            momentum_text = (
-                f"The stock moved {momentum:+.1%} over 20 sessions."
-                if momentum is not None
-                else "Recent price direction has not been measured yet."
-            )
-            bullets = [
-                momentum_text,
-                (
-                    f"This side looks for the stock to {direction}; stronger business results could support it."
-                    if kind != "Volatility"
-                    else f"This side looks for volatility to {'increase' if upward else 'decrease'}, not a price direction."
-                ),
-                "Compare fresh prices with earnings evidence before acting; this case is not historically validated.",
+            bullets = cases[side]
+            opposite = {"BULL": "BEAR", "BEAR": "BULL", "MORE": "LESS", "LESS": "MORE"}[
+                side
             ]
+            if magnitude:
+                trade = {
+                    "instrument": (
+                        "Long straddle estimate"
+                        if side == "MORE"
+                        else "Defined-risk condor research (advanced)"
+                    ),
+                    "explanation": (
+                        "Indicative paired-option cost, not an executable offer. Verify the contract deliverable and current spread before any trade."
+                        if side == "MORE"
+                        else "Selling volatility requires a complete four-leg defined-risk structure. No naked option sale is suggested."
+                    ),
+                    "entry": None,
+                    "stop": None,
+                    "max_loss": (
+                        (option_estimate or {}).get(
+                            "estimated_one_standard_contract_cost"
+                        )
+                        if side == "MORE"
+                        else None
+                    ),
+                    "exit": "Exit timing requires a verified event date and strategy inputs",
+                    "missing": (
+                        ["Indicative only; deliverable unverified"]
+                        if option_estimate and side == "MORE"
+                        else ["Complete event-matched structure unavailable"]
+                    ),
+                    "estimate": option_estimate if side == "MORE" else None,
+                }
             sides.append(
                 {
                     "id": f"{line_id}:{side}",
@@ -133,10 +159,7 @@ def build_lines(
                             else 0
                         ),
                         "bullets": bullets,
-                        "countercase": [
-                            "The price may already reflect the good or bad news.",
-                            "A surprise or market sell-off could reverse the move.",
-                        ],
+                        "countercase": cases[opposite][:2],
                         "invalidation": "Review when the price direction reverses, a new filing changes the case, or the event date changes.",
                         "trade": trade,
                         "badges": badges,

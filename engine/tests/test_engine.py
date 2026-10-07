@@ -62,7 +62,7 @@ def test_missing_options_only_affect_their_setup():
     lines, sides = build_lines(
         "TEST", {"last_close": 100, "atr_14": 2, "return_20": 0.1}, NOW
     )
-    assert len(lines) == 5
+    assert len(lines) == 6
     swing = next(
         s
         for s in sides
@@ -166,8 +166,14 @@ def test_daily_provider_excludes_still_forming_sessions():
 def test_schedule_uses_eastern_dst():
     from engine.schedule import due_jobs
 
-    assert due_jobs(datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)) == ["universe"]
-    assert due_jobs(datetime(2026, 12, 7, 11, 0, tzinfo=timezone.utc)) == ["universe"]
+    assert due_jobs(datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)) == [
+        "universe",
+        "sectors",
+    ]
+    assert due_jobs(datetime(2026, 12, 7, 11, 0, tzinfo=timezone.utc)) == [
+        "universe",
+        "sectors",
+    ]
     assert due_jobs(datetime(2026, 12, 7, 10, 0, tzinfo=timezone.utc)) == []
 
 
