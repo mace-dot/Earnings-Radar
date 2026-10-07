@@ -61,9 +61,9 @@ class Fetch:
         except (URLError,TimeoutError):raise CollectionError('Source connection failed') from None
     def json(self,url):return json.loads(self.get(url))
 
-def event(provider,pid,title,url,published,tickers=(),metadata=None,institution='SEC',claim='primary_evidence'):
+def event(provider,pid,title,url,published,tickers=(),metadata=None,institution='SEC',claim='primary_evidence',provenance='primary'):
     metadata=metadata or {};now=datetime.now(timezone.utc).isoformat()
-    payload={'title':title,'url':url,'published_at':published,'tickers':list(tickers),'metadata':metadata,'provenance':'primary','claim_type':claim}
+    payload={'title':title,'url':url,'published_at':published,'tickers':list(tickers),'metadata':metadata,'provenance':provenance,'claim_type':claim}
     digest=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     identity=hashlib.sha256(json.dumps([provider,pid,digest]).encode()).hexdigest()
     facts=[{'evidence_id':identity,'field':'title','excerpt':title}]
@@ -77,7 +77,7 @@ def event(provider,pid,title,url,published,tickers=(),metadata=None,institution=
               'caveat':'Primary-source facts and conditional interpretation; no probability of trading success.'}
     return {'id':identity,'provider':provider,'provider_event_id':pid,'content_hash':digest,'title':title,'url':url,'institution':institution,
             'published_at':published,'retrieved_at':now,'tickers':list(tickers),'analysis':analysis,'evidence_meta':metadata,
-            'provenance':'primary','claim_type':claim,'backfill':True,'story_key':hashlib.sha256(url.encode()).hexdigest()}
+            'provenance':provenance,'claim_type':claim,'backfill':True,'story_key':hashlib.sha256(url.encode()).hexdigest()}
 
 def collect_company(fetch,symbol,cik):
     rows=[];data=fetch.json(f'https://data.sec.gov/submissions/CIK{cik}.json');recent=data.get('filings',{}).get('recent',{})

@@ -42,6 +42,10 @@
     {
       "source": "/api/track-record",
       "destination": "/api/index?route=track-record"
+    },
+    {
+      "source": "/api/strategy",
+      "destination": "/api/index?route=strategy"
     }
   ],
   "headers": [

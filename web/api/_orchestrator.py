@@ -13,7 +13,18 @@ except ImportError:
  from _board import company_board
  from _directory import refresh_directory,discover
 
-ENGINE='evidence-research-v3'
+try:
+ from ._market import history,refresh as refresh_market
+ from ._sources import readable
+ from ._news import collect_news,refresh_company
+ from ._strategy import assess
+except ImportError:
+ from _market import history,refresh as refresh_market
+ from _sources import readable
+ from _news import collect_news,refresh_company
+ from _strategy import assess
+
+ENGINE='statistical-fundamental-research-v4'
 
 def valid_symbol(s):return isinstance(s,str) and bool(re.fullmatch(r'[A-Z0-9][A-Z0-9.-]{0,14}',s))
 
@@ -24,14 +35,17 @@ def company(store,symbol):
  rows=store.request('radar_events',query='select=*&tickers=cs.'+quote(json.dumps([symbol]))+'&order=published_at.desc&limit=600')
  now=datetime.now(timezone.utc)
  rows=[r for r in rows if datetime.fromisoformat(r['published_at'].replace('Z','+00:00'))<=now]
- events=enrich(rows);contexts={symbol:financial_context(events,symbol)}
+ events=[readable(e) for e in enrich(rows)];contexts={symbol:financial_context(events,symbol)}
  status=store.request('radar_status',query='select=*&id=eq.collector&limit=1');state=status[0]['payload'] if status else {}
+ prices=history(store,symbol);state=dict(state);state['quantitative']={**state.get('quantitative',{}),symbol:prices.get('statistics',{})}
  boards=company_board(events,contexts,state)
  for b in boards:b['name']=directory[0]['name']
  queue=store.request('radar_research_queue',query='select=symbol,status,reason,last_success,last_error,next_attempt,attempts&symbol=eq.'+symbol+'&limit=1')
- return {'company':directory[0],'events':events,'financial_context':contexts,'move_board':boards,'status':status,'queue':queue[0] if queue else None,
+ result={'company':directory[0],'events':events,'financial_context':contexts,'move_board':boards,'status':status,'queue':queue[0] if queue else None,
          'automatic_option_evaluation':{'action':'wait','reason':'Authorized options prices, confirmed catalyst timing, and documented expectations are not connected.'},
-         'assistant_engine':'deterministic evidence assistant; AI model not configured'}
+         'price_history':prices,'assistant_engine':'statistical and fundamental evidence assistant'}
+ result['strategies']={d:assess(result,d) for d in ('up','down')}
+ return result
 
 def snapshot(store,symbol,result):
  now=datetime.now(timezone.utc);events=result['events']
@@ -40,7 +54,8 @@ def snapshot(store,symbol,result):
           'source_ids':[e['id'] for e in available[:80]],'as_of':now.isoformat(),
           'summary':result['move_board'][0] if result['move_board'] else {},
           'limitations':['No executable options quotes','No consensus expectations','No out-of-sample validated forecasting model'],
-          'forecast_issued':False,'model_enabled':False}
+          'forecast_issued':False,'model_enabled':False,'strategies':result.get('strategies',{}),
+          'price_context':{k:result.get('price_history',{}).get(k) for k in ('status','provider','feed','adjustment','retrieved_at','statistics')}}
  store.request('radar_research_snapshots',rows=[{'id':str(uuid.uuid4()),'symbol':symbol,'engine_version':ENGINE,'payload':payload,
                  'target':'research_monitor','horizon_sessions':5,'evaluation_status':'market_data_unavailable'}],ignore=True)
 
@@ -57,6 +72,13 @@ def process_one(store,symbol=None):
   aliases=list(directory[0].get('aliases',[]))
   for r in rows:aliases.extend(r['evidence_meta'].get('former_names',[]))
   store.request('radar_universe',query='symbol=eq.'+symbol,rows={'aliases':list(dict.fromkeys(aliases))[-20:]},method='PATCH')
+  refresh_market(store,symbol)
+  news_jobs=refresh_company(store,symbol)
+  if news_jobs:
+   status=store.request('radar_status',query='select=*&id=eq.collector&limit=1');state=status[0]['payload'] if status else {}
+   jobs={j['name']:j for j in state.get('jobs',[])}
+   for j in news_jobs:jobs[j['name']]=j
+   state['jobs']=list(jobs.values());store.request('radar_status',rows=[{'id':'collector','updated_at':datetime.now(timezone.utc).isoformat(),'payload':state}])
   result=company(store,symbol);snapshot(store,symbol,result)
   if not store.rpc('radar_finish_research',{'p_owner':owner,'p_symbol':symbol,'p_error':None}):raise CollectionError('Research lease expired; result requires recheck')
   return {'status':'complete','records':len(rows),'symbol':symbol}
@@ -71,7 +93,10 @@ def request_research(store,symbol):
  if not directory or not directory[0]['active']:raise ValueError('Company is not active in the official SEC directory')
  job=store.rpc('radar_enqueue',{'p_symbol':symbol,'p_reason':'search','p_priority':100})
  if job.get('status')=='daily_capacity':return {'status':'daily_capacity','symbol':symbol,'message':'The free research allowance is full; cached research remains available.'}
- if job.get('status')=='complete':return {'status':'cached','symbol':symbol}
+ if job.get('status')=='complete':
+  refresh_market(store,symbol)
+  refresh_company(store,symbol)
+  return {'status':'cached','symbol':symbol}
  if job.get('status') in ('queued','retry'):return process_one(store,symbol)
  return {'status':job.get('status','queued'),'symbol':symbol}
 
@@ -89,7 +114,7 @@ def background(store):
   except Exception:pass
  results=[]
  for _ in range(3):
-  if time.monotonic()>deadline-90:break
+  if time.monotonic()>deadline-125:break
   result=process_one(store);results.append(result)
   if result['status']=='queued_or_busy':break
  feeds=[]
@@ -100,6 +125,7 @@ def background(store):
    for i in range(0,len(rows),25):store.request('radar_events',rows=rows[i:i+25])
    feeds.append({'name':name,'status':'complete','last_success':datetime.now(timezone.utc).isoformat(),'records':len(rows),'last_error':None})
   except Exception as exc:feeds.append({'name':name,'status':'retry','last_error':type(exc).__name__})
+ feeds.extend(collect_news(store,deadline=deadline))
  previous=store.request('radar_status',query='select=*&id=eq.collector&limit=1');state=previous[0]['payload'] if previous else {}
  jobs={j['name']:j for j in state.get('jobs',[])}
  for feed in feeds:jobs[feed['name']]={**jobs.get(feed['name'],{}),**feed}
@@ -109,6 +135,6 @@ def background(store):
    jobs[name]={'name':name,'status':result['status'],'last_success':now.isoformat() if result['status']=='complete' else old.get('last_success'),
                'last_error':result.get('error'),'last_attempt':now.isoformat(),'records':result.get('records',0)}
  state.update({'discovery':discovery,'jobs':list(jobs.values()),'cadence':'daily_scheduled','collection_note':'Daily broad filing discovery with bounded deep research; on-demand search research is automatic.',
-               'research_engine':ENGINE,'assistant_engine':'deterministic evidence assistant','market_feed':'not_configured','options_feed':'not_configured'})
+               'research_engine':ENGINE,'assistant_engine':'deterministic evidence assistant','market_feed':'authorized adapter; per-company cache reports actual availability','options_feed':'not_configured'})
  store.request('radar_status',rows=[{'id':'collector','updated_at':datetime.now(timezone.utc).isoformat(),'payload':state}])
  return {'status':'complete','discovery_matches':discovery.get('matched_companies',0),'research':results,'records':sum(r.get('records',0) for r in results)}

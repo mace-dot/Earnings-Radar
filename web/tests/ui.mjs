@@ -25,7 +25,7 @@ document.querySelector('[data-view="brief"]').dispatchEvent(new window.Event('cl
 document.querySelector('.detail-button').dispatchEvent(new window.Event('click'));
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.match(document.querySelector('#company').textContent,/AAPL.*Research dossier/);
-assert.match(document.querySelector('#company').textContent,/Price-history statistics are unavailable/);
+assert.match(document.querySelector('#company').textContent,/Price statistics need an authorized feed/);
 document.querySelector('#collect').dispatchEvent(new window.Event('click'));
 assert.match(document.querySelector('#auth-message').textContent,/Sign in/);
 assert.ok(!calls.some(c=>c.path==='/api/collect'));
@@ -70,3 +70,18 @@ document.querySelector('[data-view="track"]').dispatchEvent(new window.Event('cl
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.match(document.querySelector('#board').textContent,/No validated forecasts/);
 console.log('Autonomous UI smoke passed: name search, automatic research, cited assistant and honest track record');
+const automaticCase={direction:'down',decision:'WATCH',contract_decision:'WAIT',summary:'The downward case has mixed financial evidence.',mechanism:'Weak cash conversion can create financing pressure.',supporting:[{text:'Operating cash flow declined.'}],counterevidence:[{text:'Revenue grew.'}],funding_risks:[],scenarios:[],invalidation:['Cash conversion recovers.'],missing:['Fresh option quotes'],citations:[],methods:'Matched-period financial measures.'};
+const previousFetch=sandbox.fetch;
+sandbox.fetch=async(path,options)=>path==='/api/strategy'?(calls.push({path,options}),{ok:true,json:async()=>automaticCase}):previousFetch(path,options);
+vm.runInNewContext("chooseIdea({symbol:'TSLA',evidence_id:'a'.repeat(64)},'down')",sandbox);
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.match(document.querySelector('#idea-list').textContent,/Operating cash flow declined/);
+assert.match(document.querySelector('#idea-list').textContent,/Revenue grew/);
+assert.doesNotMatch(document.querySelector('#idea-list').textContent,/Build a documented direction thesis/);
+const chartBars=Array.from({length:70},(_,i)=>({session:new Date(Date.UTC(2026,0,1+i)).toISOString().slice(0,10),c:100+i*.2,v:1000}));
+sandbox.chartFixture={status:'available',provider:'Fixture provider',feed:'Fixture feed',currency:'USD',cadence:'completed sessions',volume_scope:'Fixture volume',adjustment:'fixture',retrieved_at:'2026-04-01T00:00:00Z',bars:chartBars,statistics:{}};
+vm.runInNewContext("appendPriceHistory(document.querySelector('#company'),chartFixture)",sandbox);
+assert.match(document.querySelector('#company').textContent,/period return/);
+assert.ok(document.querySelector('#company svg[role="img"]'));
+assert.match(document.querySelector('#company').textContent,/Accessible price table/);
+console.log('Strategy/chart UI smoke passed: automatic direction assessment, counterevidence and accessible price history');

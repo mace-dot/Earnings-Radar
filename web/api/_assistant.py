@@ -20,11 +20,11 @@ def deterministic(result,question):
  elif any(w in q for w in ('option','strike','contract','buy')):answer+=' Option decision: WAIT. Current contract prices and confirmed catalyst timing are not connected.'
  elif any(w in q for w in ('predict','probability','odds','chance')):answer+=' No calibrated prediction or success probability is available.'
  else:answer+=' Next step: '+r['next_step']
- references.append({'evidence_id':e['id'],'url':e['url'],'quote':e['title']})
+ references.append({'evidence_id':e['id'],'url':e.get('readable_url',e['url']),'quote':e['title']})
  for c in r.get('calculations',[]):
   for eid in c['evidence_ids']:
    other=next((x for x in rows if x['id']==eid),None)
-   if other and not any(x['evidence_id']==eid for x in references):references.append({'evidence_id':eid,'url':other['url'],'quote':other['title']})
+   if other and not any(x['evidence_id']==eid for x in references):references.append({'evidence_id':eid,'url':other.get('readable_url',other['url']),'quote':other['title']})
  return {'engine':'deterministic evidence assistant','answer':answer,'citations':references,'missing':r['missing'],
          'invalidation':r['invalidation'],'status':'research_only','limitations':'Interpretation of retrieved evidence; not a free-form AI model or validated forecast.'}
 
@@ -38,13 +38,19 @@ def validate_model(payload,rows):
   if not isinstance(c,dict) or set(c)!={'evidence_id','quote'} or c['evidence_id'] not in by_id:raise ValueError('Unresolved source')
   e=by_id[c['evidence_id']];texts=[e['title']]+[s['text'] for s in e.get('evidence_meta',{}).get('excerpts',[])]
   if not isinstance(c['quote'],str) or len(c['quote'])<5 or len(c['quote'])>1500 or not any(c['quote'] in t for t in texts):raise ValueError('Unverified quote')
-  cites.append({**c,'url':e['url']})
+  cites.append({**c,'url':e.get('readable_url',e['url'])})
  return {'engine':'AI interpretation — source quotes verified','answer':payload['answer'],'citations':cites,'invalidation':payload['invalidation'],
          'status':'research_only','limitations':'Valid citations do not validate every inference or a predictive trading edge.'}
 
 def answer(store,symbol,question):
  if not isinstance(question,str) or not 1<=len(question.strip())<=400:raise ValueError('Ask a company research question of up to 400 characters')
  result=company(store,symbol);fallback=deterministic(result,question)
+ direction='down' if any(w in question.lower() for w in ('down','put','bear')) else 'up' if any(w in question.lower() for w in ('up','call','bull')) else None
+ if direction:
+  strategy=result['strategies'][direction]
+  fallback={**fallback,'answer':strategy['summary']+' '+strategy['mechanism']+' '+' '.join(s['text'] for s in strategy['supporting']+strategy['counterevidence'])+' Option selection: WAIT until fresh quotes and event timing are available.',
+            'strategy':strategy,'missing':strategy['missing'],'invalidation':strategy['invalidation'],
+            'citations':[{'evidence_id':c['evidence_id'],'url':c['url'],'quote':c['title']} for c in strategy['citations']]}
  if os.getenv('RADAR_AI_ENABLED','false').lower()!='true' or not os.getenv('GROQ_API_KEY'):return fallback
  rows=result['events'][:12]
  if not rows:return fallback

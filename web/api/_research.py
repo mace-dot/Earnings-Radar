@@ -94,6 +94,13 @@ def interpretation(e,events,now=None):
         result['bull']=['A documented improvement in recurring earnings, liquidity, or outlook could strengthen the business case.']
         result['bear']=['New obligations, weaker outlook, or deteriorating cash conversion could weaken it; a filing itself is not bullish.']
         result['next_step']='Read the extracted passages and compare the financial drivers with the prior filing.'
+    if m.get('source_kind')=='publisher RSS headline':
+        result['takeaway']=e['title']
+        result['mechanism']='This is a timestamped publisher headline or official economic release. Read the source and corroborate the specific company exposure; the headline alone does not establish direction or causation.'
+        result['next_step']='Compare this report with company disclosures and observed market history. Full restricted article text has not been collected.'
+        result['confidence']='Publisher reporting, not an independently verified company fact.' if e.get('provenance')=='secondary' else 'Official release headline; details require reading the source.'
+        result['bull']=['If corroborated details improve cash-flow prospects or financing conditions, the business case may strengthen.']
+        result['bear']=['If corroborated details weaken cash flows or increase financing pressure, the business case may weaken.']
     published=stamp(e.get('published_at')); age=(now-published).total_seconds()/86400 if published else float('inf')
     parts={'source_support':20 if e.get('provenance','primary')=='primary' else 8,
            'freshness':20 if 0<=age<=2 else 12 if 0<=age<=7 else 4 if 0<=age<=30 else 0,

@@ -64,6 +64,12 @@ class handler(BaseHTTPRequestHandler):
             payload=json.loads(self.rfile.read(size));path='/api/'+parse_qs(urlsplit(self.path).query)['route'][0] if 'route' in parse_qs(urlsplit(self.path).query) else urlsplit(self.path).path;store=Store()
             if not isinstance(payload,dict):return self.respond(400,{'error':'JSON object required'})
             if path=='/api/research':return self.respond(200,request_research(store,str(payload.get('symbol','')).upper()))
+            if path=='/api/strategy':
+                request_research(store,str(payload.get('symbol','')).upper())
+                result=company(store,str(payload.get('symbol','')).upper())
+                direction=payload.get('direction')
+                if direction not in ('up','down'):return self.respond(400,{'error':'Choose up or down'})
+                return self.respond(200,result['strategies'][direction])
             if path=='/api/assistant':return self.respond(200,company_answer(store,str(payload.get('symbol','')).upper(),payload.get('question','')))
             if path=='/api/session':
                 action=payload.get('action')

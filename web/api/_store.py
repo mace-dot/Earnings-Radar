@@ -16,7 +16,7 @@ class Store:
             raise StoreError('Database connection is not configured')
 
     def request(self, table, *, query='', rows=None, conflict='id', ignore=False, method=None):
-        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas', 'radar_universe', 'radar_research_queue', 'radar_research_snapshots', 'radar_model_cache'}:
+        if table not in {'radar_events', 'radar_status', 'radar_watchlists', 'radar_collection_state', 'radar_ideas', 'radar_universe', 'radar_research_queue', 'radar_research_snapshots', 'radar_model_cache', 'radar_market_cache'}:
             raise ValueError('Unknown table')
         if rows is not None:
             if method not in ('PATCH',):query = 'on_conflict=' + conflict
@@ -49,13 +49,24 @@ class Store:
             from _research import enrich, financial_context
         events = enrich(self.request('radar_events', query='select=*&order=published_at.desc&limit=600'))
         status = self.request('radar_status', query='select=*&id=eq.collector&limit=1')
+        try:
+            from ._sources import readable
+            from ._market import history
+        except ImportError:
+            from _sources import readable
+            from _market import history
+        events=[readable(e) for e in events]
+        state=dict(status[0]['payload']) if status else {}
         symbols=sorted({s for e in events for s in e.get('tickers',[])})
         contexts={s:financial_context(events,s) for s in symbols}
         try:
             from ._board import company_board
         except ImportError:
             from _board import company_board
-        boards=company_board(events,contexts,status[0]['payload'] if status else {})
+        caches=self.request('radar_market_cache',query='select=symbol,payload&limit=1000')
+        available={c['symbol']:c['payload'].get('statistics',{}) for c in caches}
+        state['quantitative']={s:available.get(s,{}) for s in symbols}
+        boards=company_board(events,contexts,state)
         for b in boards:
             directory=self.request('radar_universe',query='select=name&symbol=eq.'+b['symbol']+'&limit=1')
             if directory:b['name']=directory[0]['name']
@@ -65,7 +76,7 @@ class Store:
                 'source_health': self.source_health(events,status)}
 
     def rpc(self, name, payload):
-        if name not in {'radar_claim_collection','radar_enqueue','radar_claim_research','radar_finish_research','radar_reserve_model_call','radar_search_directory'}: raise ValueError('Unknown RPC')
+        if name not in {'radar_claim_collection','radar_enqueue','radar_claim_research','radar_finish_research','radar_reserve_model_call','radar_search_directory','radar_claim_market','radar_claim_news'}: raise ValueError('Unknown RPC')
         headers={'apikey':self.key,'Content-Type':'application/json'}
         if not self.key.startswith('sb_secret_'):headers['Authorization']='Bearer '+self.key
         try:
@@ -89,13 +100,16 @@ class Store:
         by_id={s['id']:dict(s) for s in registry}
         for sid,name in [('sec','SEC filings'),('sec_fundamentals','SEC financial facts'),('fed_press','Federal Reserve releases'),('fed_speeches','Federal Reserve speeches')]:
             by_id.setdefault(sid,{'id':sid,'name':name,'documentation_url':'https://www.sec.gov' if sid.startswith('sec') else 'https://www.federalreserve.gov','capabilities':'Official source evidence'})
+        for sid,name in [('yahoo_rss','Yahoo Finance headlines'),('cnbc_rss','CNBC headlines'),('bls_rss','Bureau of Labor Statistics'),('bea_rss','Bureau of Economic Analysis')]:
+            by_id.setdefault(sid,{'id':sid,'name':name,'capabilities':'Public RSS headlines; full restricted articles are not collected','documentation_url':{'yahoo_rss':'https://finance.yahoo.com','cnbc_rss':'https://www.cnbc.com','bls_rss':'https://www.bls.gov','bea_rss':'https://www.bea.gov'}[sid]})
         for sid,s in by_id.items():
             matching=[e for e in events if e['provider']==sid or sid=='sec' and e['provider']=='sec_document']
             related=[j for j in jobs if j['name']==sid or j['name'].startswith(sid+':') or sid=='sec_fundamentals' and j['name'].startswith('sec:')]
             last=max((j['last_success'] for j in related if j.get('last_success')),default=None)
+            if not last and matching:last=max(e['retrieved_at'] for e in matching)
             if matching and last:s['integration_status']='working integration'
             elif s.get('access_status')=='licensed_access_required':s['integration_status']='licensed access required'
-            elif sid in ('sec','sec_fundamentals','fed_press','fed_speeches','alpaca_news','alpaca_market'):s['integration_status']='available but not configured'
+            elif sid in ('sec','sec_fundamentals','fed_press','fed_speeches','alpaca_news','alpaca_market','yahoo_rss','cnbc_rss','bls_rss','bea_rss'):s['integration_status']='available but not configured'
             else:s['integration_status']='unsupported'
             s.update({'last_success':last,'records':len(matching),'errors':[j['last_error'] for j in related if j.get('last_error')],
                       'last_retrieval':max((e['retrieved_at'] for e in matching),default=None)})
