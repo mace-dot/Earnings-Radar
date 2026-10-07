@@ -1,0 +1,7 @@
+httpx==0.28.1
+pydantic==2.12.3
+numpy==2.2.6
+scikit-learn==1.7.2
+black==25.9.0
+ruff==0.14.0
+pytest==8.4.2

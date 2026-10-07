@@ -208,3 +208,9 @@ it is not an always-on consolidated stock/options stream. No paid service, broke
 or external notifications are activated.
 
 Earlier Render/Streamlit hosting documentation is retained for historical reference.
+
+## New master-plan implementation
+
+The replacement Next.js app is in `apps/web` and the scheduled Python engine is in `engine`.
+See [master implementation setup](docs/MASTER_IMPLEMENTATION.md), [actual progress and blockers](docs/PROGRESS.md), and [the adopted master plan](docs/MASTER_PLAN.md).
+The existing `web` deployment is preserved until the replacement passes the release criteria.

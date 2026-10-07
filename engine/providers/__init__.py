@@ -1,0 +1,1 @@
+"""Replaceable financial data adapters."""

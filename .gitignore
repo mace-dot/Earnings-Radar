@@ -32,3 +32,14 @@ data/*.db-shm
 *.log
 
 web/node_modules/
+
+# New application and engine
+**/node_modules/
+**/.next/
+**/.env.local
+**/.env.*.local
+engine/.venv/
+.ruff_cache/
+**/test-results/
+**/playwright-report/
+**/*.tsbuildinfo
