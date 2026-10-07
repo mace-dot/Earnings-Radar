@@ -91,3 +91,15 @@ GitHub Actions run metadata is readable, but configuring Actions secrets returns
 - Quote polling requests one latest IEX trade every 30 seconds while the stock page is open. Heavy statistics are computed by engine jobs; this is not full-market streaming coverage.
 
 Remaining: historical dataset/backfill credential, true fundamentals/estimate revisions/short-interest features, validated prediction/EV pipeline, complete multi-leg structures and automatic publish/grade/paper portfolio, alert opt-in/dispatch, and successful scheduled worker verification. No paid service activated, no trades placed, no unsupported probability shown.
+
+## Deployment and scheduled-worker check
+
+Pushed code to main at `7faf26b`. Vercel reports READY for the protected Move Engine preview:
+https://earnings-radar-bxh2rkh87-mace16.vercel.app/stock/MU
+
+GitHub CI succeeded for this commit. The engine doctor was dispatched successfully (HTTP 204), and its logs establish that GitHub Actions currently lacks working Supabase and provider credentials. SEC alone succeeded there. A successful doctor workflow exit is not evidence all providers passed.
+
+The integration can read run metadata and dispatch workflows but cannot manage Actions secrets (HTTP 403, Resource not accessible by integration). For unattended queue collection, set repository Actions secrets through GitHub Settings → Secrets and variables → Actions:
+SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ALPACA_API_KEY, ALPACA_API_SECRET, FINNHUB_API_KEY (reuse the working FINN_HUB value). Optional ALPHAVANTAGE_API_KEY enables historical backfill. No values belong in chat or source code.
+
+Verified credentials in the cloud or Vercel do not automatically become GitHub Actions secrets. Until this is fixed, the web price refresh works independently, but new-symbol queue requests cannot be promised a five-minute production completion.

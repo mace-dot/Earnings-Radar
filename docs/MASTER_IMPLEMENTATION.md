@@ -72,3 +72,8 @@ python -m engine.run context --symbols MU
 Apply additive migrations 009, 010 and 011 in order (already applied to the existing project). The worker uses calendar-driven scope. The queue is serviced by the five-minute GitHub schedule when its secrets are available. Existing API integration cannot manage those secrets (HTTP 403), even though Git and Actions run metadata work.
 
 To switch production **after acceptance**: Vercel → earnings-radar → Settings → Build and Deployment → Root Directory `apps/web`; Framework `Next.js`; Install `npm ci`; Build `npm run build`; Output `.next` (or framework default), then redeploy `main`. Preserve server env values for Supabase and Alpaca. The existing production root was not switched by this update.
+
+
+Current Move Engine preview: https://earnings-radar-bxh2rkh87-mace16.vercel.app/stock/MU . Sign in with the existing Vercel account. The older preview URL does not contain the new UI code.
+
+Worker doctor logs confirm missing GitHub Actions credentials; set the five required names in repository Settings → Secrets and variables → Actions, then run Master research engine with `doctor`, followed by `queue`. The five-minute schedule is present, but credential availability must be confirmed by per-provider OK results, not workflow success alone.
