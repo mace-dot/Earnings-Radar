@@ -103,3 +103,11 @@ The integration can read run metadata and dispatch workflows but cannot manage A
 SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ALPACA_API_KEY, ALPACA_API_SECRET, FINNHUB_API_KEY (reuse the working FINN_HUB value). Optional ALPHAVANTAGE_API_KEY enables historical backfill. No values belong in chat or source code.
 
 Verified credentials in the cloud or Vercel do not automatically become GitHub Actions secrets. Until this is fixed, the web price refresh works independently, but new-symbol queue requests cannot be promised a five-minute production completion.
+
+## Production deployment repair — October 7
+
+Changed the actual Vercel project from `web` / Python / `public` to `apps/web` / Next.js / `.next`. Committed matching `apps/web/vercel.json` so future GitHub deployments use the correct framework and output directory. The previous Next.js failure was `NEXT_OUTPUT_DIR_MISSING`, caused by inheriting the old `public` output setting.
+
+Production deployment `dpl_2xhvU4B59VbGkR1qrWGhnHWUdzg8` reached READY and owns `earnings-radar-two.vercel.app`. Live requests to `/`, `/stock/MU`, and `/moves` returned HTTP 200 with Next.js assets. Local production build passed with the cloud proxy enabled.
+
+The separate GitHub research workflow failure was inspected: run `37685933535` fails with `Supabase server configuration missing`. GitHub secret-management permission was retested and remains HTTP 403. Changing Vercel settings does not resolve this scheduled-worker credential prerequisite; no unattended coverage claim is made.
