@@ -134,3 +134,54 @@ def test_long_option_max_loss_uses_ask_and_multiplier():
         1000,
     )
     assert select_long([item], "BEAR", NOW)["one_contract_max_loss"] == 210
+
+
+def test_daily_provider_excludes_still_forming_sessions():
+    import httpx
+    from engine.providers.market import Alpaca
+
+    provider = Alpaca()
+    provider.client = httpx.Client(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200,
+                json={
+                    "bars": {
+                        "TEST": [
+                            {"t": "2099-01-01T05:00:00Z", "c": 100},
+                            {"t": "2020-01-02T05:00:00Z", "c": 90},
+                        ]
+                    },
+                    "next_page_token": None,
+                },
+            )
+        )
+    )
+    bars = provider.bars(["TEST"], "2020-01-01", "2099-01-02")
+    assert len(bars) == 1
+    assert bars[0].values["c"] == 90
+    assert bars[0].observed_at.hour == 21
+
+
+def test_schedule_uses_eastern_dst():
+    from engine.schedule import due_jobs
+
+    assert due_jobs(datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)) == ["universe"]
+    assert due_jobs(datetime(2026, 12, 7, 11, 0, tzinfo=timezone.utc)) == ["universe"]
+    assert due_jobs(datetime(2026, 12, 7, 10, 0, tzinfo=timezone.utc)) == []
+
+
+def test_direction_grading_waits_for_horizon_and_does_not_claim_option_pnl():
+    from engine.grading import grade_direction
+
+    pick = {
+        "id": "fixture",
+        "side": "BEAR",
+        "expires_at": (NOW + timedelta(days=1)).isoformat(),
+        "payload": {"entry": 100},
+    }
+    with pytest.raises(ValueError, match="horizon"):
+        grade_direction(pick, 90, NOW, "fixture")
+    result = grade_direction(pick, 90, NOW + timedelta(days=2), "fixture")
+    assert result["payload"]["return_fraction"] == pytest.approx(0.1)
+    assert result["payload"]["contract_pnl"] is None

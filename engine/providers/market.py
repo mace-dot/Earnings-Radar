@@ -50,14 +50,18 @@ class Alpaca:
                     if float(bar["c"]) <= 0:
                         raise ValueError("Invalid closing price")
                     # Historical rows retrieved today are not proof of historical availability.
+                    session_close = datetime.combine(
+                        stamp(bar["t"]).date(),
+                        datetime.min.time().replace(hour=16),
+                        ZoneInfo("America/New_York"),
+                    ).astimezone(timezone.utc)
+                    if session_close > retrieved:
+                        # A still-forming daily bar is not a completed session close.
+                        continue
                     output.append(
                         Observation(
                             symbol,
-                            datetime.combine(
-                                stamp(bar["t"]).date(),
-                                datetime.min.time().replace(hour=16),
-                                ZoneInfo("America/New_York"),
-                            ).astimezone(timezone.utc),
+                            session_close,
                             retrieved,
                             "Alpaca",
                             dict(bar),

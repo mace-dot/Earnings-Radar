@@ -2,6 +2,8 @@
 
 The new app lives in `apps/web`; the current production root stays `web` until the replacement passes Phase 3. No legacy code or existing database rows were removed.
 
+Protected new-app preview: https://earnings-radar-7yx3juvjb-mace16.vercel.app/ (sign in with the existing Vercel account). Vercel reports READY; browser smoke against the same Supabase data passed locally.
+
 ## Development
 
 Use Python 3.12 and Node 24:
