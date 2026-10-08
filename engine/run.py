@@ -6,6 +6,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
+
 from engine.calendar import reconcile
 from engine.features import price_features
 from engine.move_features import setup_features
@@ -27,6 +29,11 @@ def safe_diagnostic(exc: Exception) -> str:
         "MASSIVE_API_KEY missing; a historical-data account is required",
     }:
         return str(exc)
+    if (
+        isinstance(exc, httpx.HTTPStatusError)
+        and exc.request.url.host == "api.massive.com"
+    ):
+        return f"Massive API HTTP {exc.response.status_code}; verify key, account entitlement and rate limit"
     match = re.fullmatch(r"(Database|Queue) operation failed \((\d{3})\)", str(exc))
     if match:
         return f"{match[1]} HTTP {match[2]}"
@@ -532,7 +539,16 @@ def main() -> None:
         elif job == "history_sync":
             from engine.providers.daily_history import synchronize
 
-            payload = synchronize(store, now)
+            payload = {"sessions": [], "observations": 0, "provider_errors": []}
+            for _ in range(args.batches):
+                result = synchronize(store, datetime.now(timezone.utc))
+                payload["sessions"].extend(result["sessions"])
+                payload["observations"] += result["observations"]
+                payload["provider_errors"].extend(result["provider_errors"])
+                payload["feed"] = result["feed"]
+                payload["remaining_sessions"] = result["remaining_sessions"]
+                if not result["sessions"] or not result["remaining_sessions"]:
+                    break
         elif job == "market_scan":
             from engine.market_scan import market_scan
 

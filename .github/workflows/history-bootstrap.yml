@@ -1,21 +1,16 @@
-name: Market coverage bootstrap
+name: Adjusted history bootstrap
 on:
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: market-coverage-bootstrap
+  group: master-research-engine
   cancel-in-progress: false
 jobs:
-  scan:
+  history:
     environment: Production
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,10 +19,10 @@ jobs:
           cache: pip
           cache-dependency-path: engine/requirements.txt
       - run: pip install -r engine/requirements.txt
-      - name: Claim distinct leased batches
+      - name: Resume rate-limited shared history archive
         env:
-          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
-          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://fepyjsmmgortycprrxjr.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SECRET_KEY }}
-        run: python -m engine.run market_scan --batches 15
+          MASSIVE_API_KEY: ${{ secrets.MASSIVE_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+        run: python -m engine.run history_sync --batches 30

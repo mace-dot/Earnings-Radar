@@ -225,3 +225,7 @@ The user added the Massive secret in a GitHub environment. A fresh dispatch stil
 
 
 A Production-attached dispatch still reported MASSIVE_API_KEY missing. The exact secret location/name must be confirmed; no source operation is claimed successful. Archive RPC reads now paginate explicitly beyond Supabase's default 1,000-row cap with deterministic ordering and a bounded maximum. A 2,037-row regression verifies no silent truncation. All 100 engine tests pass locally. The preceding ab1e26b remote CI passed.
+
+### Phase 12 — Resume complete adjusted history
+
+Massive repository authentication verified in GitHub run 37814583898: 37,798 adjusted observations across October 5–7, with a successful corporate-action reference query. Added a resumable serial history bootstrap sharing the scheduled worker's concurrency group and existing free-account request pacing. Market bootstrap now uses the same repository Massive credential and Production environment. Acquisition errors expose safe HTTP status diagnostics without keys or response bodies. Local engine suite: 101 passed. Full archive and refreshed coverage verification are in progress; predictive model approval remains separate from data acquisition.

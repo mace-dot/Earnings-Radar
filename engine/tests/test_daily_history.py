@@ -138,3 +138,21 @@ def test_history_rpc_paginates_past_supabase_default_row_cap():
         {"p_symbols": ["FIXTURE"], "p_start": "2026-01-01", "p_end": "2026-10-08"},
     )
     assert result == dataset
+
+
+def test_provider_diagnostic_reports_status_without_exposing_credentials_or_body():
+    from engine.run import safe_diagnostic
+
+    request = httpx.Request(
+        "GET", "https://api.massive.com/fixture?apiKey=fixture-secret"
+    )
+    response = httpx.Response(
+        403, request=request, text="fixture-private-provider-body"
+    )
+    error = httpx.HTTPStatusError(
+        "fixture-private-error", request=request, response=response
+    )
+    message = safe_diagnostic(error)
+    assert "HTTP 403" in message
+    assert "fixture-secret" not in message
+    assert "fixture-private" not in message
