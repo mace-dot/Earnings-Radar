@@ -196,3 +196,8 @@ Verification: 85 engine tests pass, including future-data rejection and exact vo
 ### Phase 10 follow-up: Directory refresh repair
 
 The scheduled universe refresh failed with PostgREST PGRST102 (all object keys must match). Existing listing/sector enrichment made row shapes differ. Refresh now groups equal-shaped rows into bounded upserts, preserving optional enrichment rather than inserting nulls. A regression test exercises enriched and newly discovered companies together. Actual connected refresh completed with 10,435 identifiers; this new directory count does not imply the newly added identifier has already been scanned. All 86 engine tests pass. Phase 10 dd79b43 Vercel deployment is READY.
+
+
+## Phase 11: Isolating history collection network failures
+
+A fresh GitHub public-feed probe still returned Yahoo HTTP 429 and Stooq HTTP 404. Added a bounded, worker-authenticated Vercel retrieval endpoint to test standard Nasdaq HTTPS collection from the deployed server. It fetches one named symbol from a fixed source host and bounded date range, preserves actual retrieval time, never sends the database credential upstream, and performs no scoring. HMAC authentication binds the exact body to a two-minute timestamp window using the existing shared server credential. No access challenges or rate limits are bypassed. This route is an experiment until a production source request succeeds; existing worker transport remains unchanged.
