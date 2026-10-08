@@ -18,7 +18,7 @@ SLOTS = {
     (17, 30): ["prices", "score"],
     (17, 45): ["grade"],
     (17, 50): ["validate"],
-    (20, 0): ["score", "validate"],
+    (20, 0): ["prices", "score", "validate"],
 }
 
 

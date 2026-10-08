@@ -41,3 +41,10 @@ def test_usable_calendar_partial_does_not_retry_forever_for_optional_provider():
     assert "calendar" not in pending_jobs(now, runs)
     runs[0]["payload"] = {"events": 0}
     assert "calendar" in pending_jobs(now, runs)
+
+
+def test_evening_history_rollover_refreshes_prices_before_validation():
+    from engine.schedule import due_jobs
+
+    now = datetime(2026, 10, 8, 20, 0, tzinfo=ZoneInfo("America/New_York"))
+    assert due_jobs(now) == ["prices", "score", "validate"]
