@@ -1,6 +1,6 @@
 # AGENTS.md — Earnings Radar (standing rules for Codex)
 
-Put this file in the repo root. Codex reads it on every task. The full build spec is in `docs/MASTER_PLAN.md`.
+Put this file in the repo root. Codex reads it on every task. The current build spec is `docs/PREDICTIVE_BALANCE_PLAN.md`. `docs/MASTER_PLAN.md` is the earlier product handoff and yields where they conflict.
 
 ## What we are building
 A PrizePicks-style earnings and volatility board for retail investors. Every US-listed stock can be searched. Liquid names get automatically generated "lines" (trade setups) around upcoming earnings, from about 60 days before the report to 20 days after. Each line has a **BULL** and a **BEAR** button. Each side explains its case in plain English and shows an auto-selected trade, a confidence score, the historical hit rate, and a link to deeper research.

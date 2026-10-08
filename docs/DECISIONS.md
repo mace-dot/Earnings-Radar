@@ -42,3 +42,11 @@ When fresh history collection fails, reuse only genuinely acquired coverage obse
 Standard Nasdaq collection fails outside the managed cloud environment; Yahoo remains rate-limited and Stooq unavailable in the tested GitHub context. Use an account-authorized Massive/Polygon grouped daily archive when a usable credential exists. Verify actual free-plan entitlement before claiming the feed works. Source denials remain observable; neither credentials nor source challenges are bypassed. Download once per session and share within the worker rather than repeating full-market histories per ticker.
 
 Price-magnitude model evaluation must use frozen prospective inputs, five later exchange sessions and verified split-free windows. Current historical cache acquisition times cannot be backdated to manufacture point-in-time training cases. Store real calibration and uncertainty when enough cases exist; do not publish a number merely because tests or a model training call ran successfully. The new five-session target is distinct from event-specific earnings moves and option-contract profit.
+
+### Predictive balance — retail evidence and large moves
+
+The next research program is specified in `docs/PREDICTIVE_BALANCE_PLAN.md`. Institutional-style process means separate evidence desks, point-in-time features, pre-registered targets, ablation against a price-only baseline, and human promotion. It does not mean reproducing a hedge-fund portfolio or claiming its results.
+
+The research target is a large stock move, first the existing five-session absolute move above 5 percent. Direction, earnings-event moves, and option payoffs stay separate labels. Retail posts, authorized news, and SEC facts can enter that model only as their own blocks, with missingness preserved. They are dropped from the score if they do not beat the price-only model out of sample. They still remain visible as evidence.
+
+Daily volume and range versus the same stock’s history may be called a volume-and-range dislocation. They are not a liquidity sweep. A sweep requires licensed trade or depth data and stays blocked under the no-payment rule. Forum history is not backfilled. Sentiment features start on the day they are actually stored.

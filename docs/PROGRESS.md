@@ -237,3 +237,18 @@ Added automatic post-history full-directory refresh with a 61-session completene
 Verified deployed company chart, moves, public record and forecast testing return HTTP 200; production same-origin refresh returned a fresh Finnhub trade. CI and Vercel succeeded for 2c00871. Audit found the feature view lacked provenance columns needed by validation after the close; migration 018 adds them and a real database read verifies the query. Evening rollover now refreshes source bars before scoring and freezing forward cases. This repairs prospective collection; it does not create retroactive cases or approve a model.
 
 Whole-market archive completed: 1,035,343 observations, 83 sessions (June 10–October 7), GitHub history bootstrap 37816366030 succeeded. The first scan exposed database timeouts expanding the complete archive repeatedly; paused run 37818957538 without deleting source records. Migration 019 adds a derived per-symbol cache linked to original acquisition IDs and resumable indexing markers. A real 100-company query returned 5,235 bars in 0.46 seconds; storage measured 367 MB. Original source timestamps remain authoritative. Archive-only readers need no duplicated provider key. Missing identifiers are reported unavailable only after the complete window has been indexed; instrument eligibility remains unresolved rather than invented.
+
+## Predictive balance plan — 2026-10-08
+
+Specification written in `docs/PREDICTIVE_BALANCE_PLAN.md`. It makes large-move prediction the research target and keeps retail discussion, news, filings, and price behavior as separate desks. No new collection, model, or interface shipped with the document.
+
+- [ ] Phase 1: Repair scan HTTP 500, bounded transient retries, honest workflow status, run skipped research, classify 3,254 unavailable identifiers.
+- [ ] Phase 2: Shared provider interface. Extend Stocktwits. Reddit, TradingView, and Seeking Alpha only if official no-cost access is verified; otherwise record the blocked capability.
+- [ ] Phase 3: Provenance migrations, collection runs, versioned sentiment snapshots, deletion rules.
+- [ ] Phase 4: Deterministic sentiment math joined to market, filing, and news features at the same cutoff.
+- [ ] Phase 5: Cross-desk research flags with evidence, counterevidence, and invalidation. No probability.
+- [ ] Phase 6: Bounded rotating collection from quantitative priority. One blocked source does not stop the others.
+- [ ] Phase 7: Crowd and evidence cards in plain language, including small-sample and missing-source states.
+- [ ] Phase 8: Prospective ablation against the price-only baseline. No self-approval. No invented forum history.
+
+Not started, and not claimed: liquidity-sweep detection, calibrated large-move probabilities, Reddit or Seeking Alpha collection, TradingView community text.

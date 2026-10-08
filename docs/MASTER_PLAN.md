@@ -1,5 +1,7 @@
 # Earnings Radar — Master Build Plan (Codex handoff)
 
+> **Current specification:** `docs/PREDICTIVE_BALANCE_PLAN.md` is the plan for the operational pipeline and for predictive large-move research. It overrides this file where they conflict. This document remains the earlier product handoff.
+
 > **How to use this file:** save it as `docs/MASTER_PLAN.md` and save `AGENTS.md` in the repo root. Then paste the **single build-everything prompt in §12** into Codex once. Codex works through all phases in order, tracks progress in `docs/PROGRESS.md`, and commits after each phase. If it runs out of time or context, paste the short **Resume prompt** (also in §12) and it picks up where it stopped.
 
 ---
