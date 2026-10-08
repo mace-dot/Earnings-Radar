@@ -117,3 +117,24 @@ def test_grouped_archive_keeps_original_source_and_exact_volume(monkeypatch):
     assert db.saved[0]["payload"]["results"][0]["v"] == 149588
     assert isinstance(db.saved[0]["payload"]["results"][0]["v"], int)
     assert db.saved[0]["payload"]["results"][1]["v"] is None
+
+
+def test_history_rpc_paginates_past_supabase_default_row_cap():
+    from engine.store import Store
+
+    db = Store.__new__(Store)
+    db.url = "https://fixture.supabase.co"
+    dataset = [
+        {"symbol": f"FIXTURE{i:05}", "session_date": "2026-10-07"} for i in range(2037)
+    ]
+
+    def response(request):
+        offset = int(request.url.params["offset"])
+        return httpx.Response(200, json=dataset[offset : offset + 1000])
+
+    db.client = httpx.Client(transport=httpx.MockTransport(response))
+    result = db.rpc(
+        "radar_history_bars",
+        {"p_symbols": ["FIXTURE"], "p_start": "2026-01-01", "p_end": "2026-10-08"},
+    )
+    assert result == dataset

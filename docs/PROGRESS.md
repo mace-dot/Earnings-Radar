@@ -222,3 +222,6 @@ The pinned e06efd3 release passed remote CI and the GitHub validate job complete
 
 
 The user added the Massive secret in a GitHub environment. A fresh dispatch still reported the key missing because the research job had no environment attached. The existing Production environment has no protection rules or branch restriction in its metadata. Attach the worker to Production so environment-scoped credentials are visible, while repository secrets remain usable. Secret metadata/value access was not granted; no key was read or moved.
+
+
+A Production-attached dispatch still reported MASSIVE_API_KEY missing. The exact secret location/name must be confirmed; no source operation is claimed successful. Archive RPC reads now paginate explicitly beyond Supabase's default 1,000-row cap with deterministic ordering and a bounded maximum. A 2,037-row regression verifies no silent truncation. All 100 engine tests pass locally. The preceding ab1e26b remote CI passed.

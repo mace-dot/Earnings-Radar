@@ -123,6 +123,29 @@ class Store:
             "radar_history_bars",
         }:
             raise ValueError("Unknown RPC")
+        if name == "radar_history_bars":
+            output = []
+            for offset in range(0, 50000, 1000):
+                response = self.client.post(
+                    f"{self.url}/rest/v1/rpc/{name}",
+                    json=payload,
+                    params={
+                        "limit": "1000",
+                        "offset": str(offset),
+                        "order": "symbol.asc,session_date.asc",
+                    },
+                )
+                if not response.is_success:
+                    raise RuntimeError(
+                        f"Queue operation failed ({response.status_code})"
+                    )
+                rows = response.json()
+                output.extend(rows)
+                if len(rows) < 1000:
+                    return output
+            raise RuntimeError(
+                "History RPC exceeded capacity; do not silently truncate"
+            )
         response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)
         if not response.is_success:
             raise RuntimeError(f"Queue operation failed ({response.status_code})")
