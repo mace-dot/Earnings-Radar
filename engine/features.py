@@ -18,6 +18,7 @@ def price_features(bars: list[Observation], as_of: datetime) -> dict[str, Any]:
         "version": VERSION,
         "sample_size": len(closes),
         "last_close": closes[-1] if closes else None,
+        "source_last_observed_at": values[-1][0].isoformat() if values else None,
     }
     for horizon in (5, 20, 60):
         output[f"return_{horizon}"] = (

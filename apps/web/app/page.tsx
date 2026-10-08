@@ -1,12 +1,13 @@
+import Link from "next/link";
 import { read } from "@/lib/db";
-import type { Security, Line, Side, Event } from "@/lib/types";
+import type { Security, Line, Side, Event, Pick } from "@/lib/types";
 import { Board } from "@/components/board";
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; view?: string }>;
 }) {
-  const { q = "" } = await searchParams;
+  const { q = "", view = "radar" } = await searchParams;
   const term = q
     .trim()
     .replace(/[^a-zA-Z0-9 .-]/g, "")
@@ -14,7 +15,8 @@ export default async function Page({
   let companies: Security[] = [],
     lines: Line[] = [],
     events: Event[] = [],
-    unavailable = false;
+    unavailable = false,
+    automaticShown = false;
   try {
     const today = new Date().toISOString().slice(0, 10);
     const weekEnd = new Date(Date.now() + 7 * 86400000)
@@ -27,13 +29,28 @@ export default async function Page({
           order: "report_date.asc",
           limit: "60",
         });
-    const weeklySymbols = [...new Set(weekly.map((e) => e.symbol))].join(",");
+    const published =
+      term || view === "earnings"
+        ? []
+        : await read<Pick>("picks", {
+            order: "as_of.desc",
+            expires_at: `gt.${new Date().toISOString()}`,
+            limit: "60",
+          });
+    automaticShown = published.length > 0;
+    const boardSymbols = [
+      ...new Set(
+        published.length
+          ? published.map((p) => p.symbol)
+          : weekly.map((e) => e.symbol),
+      ),
+    ].join(",");
     companies = await read<Security>("securities", {
       order: "symbol.asc",
       limit: "60",
       ...(term
         ? { or: `(symbol.ilike.*${term}*,name.ilike.*${term}*)` }
-        : { ...(weeklySymbols ? { symbol: `in.(${weeklySymbols})` } : {}) }),
+        : { ...(boardSymbols ? { symbol: `in.(${boardSymbols})` } : {}) }),
     });
     const symbols = companies.map((c) => c.symbol).join(",");
     if (symbols) {
@@ -98,7 +115,11 @@ export default async function Page({
           </p>
         </div>
         <div className="panel">
-          <strong>Reporting this week · automatic calendar coverage</strong>
+          <strong>
+            {automaticShown
+              ? "Automatically researched setups"
+              : "Reporting this week"}
+          </strong>
           <p className="muted">
             Before earnings · Earnings reaction · After earnings
             <br />
@@ -106,7 +127,19 @@ export default async function Page({
           </p>
         </div>
       </section>
+      <nav className="toolbar" aria-label="Research board views">
+        <Link className="button" href="/?view=radar">
+          Automatic research
+        </Link>
+        <Link className="button" href="/?view=earnings">
+          Earnings this week
+        </Link>
+        <Link className="button" href="/moves">
+          Quiet setups
+        </Link>
+      </nav>
       <form className="toolbar" role="search">
+        <input type="hidden" name="view" value={view} />
         <label className="sr-only" htmlFor="search">
           Company name or ticker
         </label>

@@ -24,6 +24,7 @@ def make_pick(side="BULL"):
             "retrieved_at": NOW.isoformat(),
             "source": "fixture-exchange",
         },
+        "source_last_observed_at": NOW.isoformat(),
         "sample_size": 100,
         "last_close": 100,
         "atr_14": 2,
@@ -162,4 +163,11 @@ def test_unknown_security_type_and_stale_listing_prevent_paper_publication():
     assert paper_pick(line, side, feature, [], NOW) is None
     feature["asset_type"] = "common_stock"
     feature["listing_metadata"]["retrieved_at"] = (NOW - timedelta(days=8)).isoformat()
+    assert paper_pick(line, side, feature, [], NOW) is None
+
+
+def test_recomputing_features_cannot_make_old_price_history_fresh():
+    _, feature, line, side = make_pick()
+    feature["source_last_observed_at"] = (NOW - timedelta(days=5)).isoformat()
+    feature["as_of"] = NOW.isoformat()
     assert paper_pick(line, side, feature, [], NOW) is None

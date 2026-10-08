@@ -7,10 +7,11 @@ from zoneinfo import ZoneInfo
 
 from engine.options_estimates import parse_contract
 
-VERSION = "paper-momentum-options-v3-listed-common"
+VERSION = "paper-momentum-options-v4-fresh-history"
 SUPPORTED_VERSIONS = (
     "paper-momentum-options-v1",
     "paper-momentum-options-v2-public-feeds",
+    "paper-momentum-options-v3-listed-common",
     VERSION,
 )
 
@@ -24,10 +25,12 @@ def research_is_fresh(payload: dict[str, Any], as_of: datetime) -> bool:
         return False
 
 
-def research_is_fresh_listing(metadata: dict[str, Any], as_of: datetime) -> bool:
+def research_is_fresh_listing(
+    metadata: dict[str, Any], as_of: datetime, max_age: timedelta = timedelta(days=7)
+) -> bool:
     try:
         collected = datetime.fromisoformat(metadata["retrieved_at"])
-        return timedelta(0) <= as_of - collected <= timedelta(days=7)
+        return timedelta(0) <= as_of - collected <= max_age
     except (KeyError, TypeError, ValueError):
         return False
 
@@ -140,6 +143,12 @@ def paper_pick(
         feature.get("listing_metadata", {}), as_of
     ):
         return None
+    if not research_is_fresh_listing(
+        {"retrieved_at": feature.get("source_last_observed_at")},
+        as_of,
+        timedelta(days=4),
+    ):
+        return None
     trade = side["payload"]["trade"]
     contract = trade.get("contract")
     momentum, distance = feature.get("return_20"), feature.get("sma_50_distance")
@@ -179,9 +188,10 @@ def paper_pick(
             "countercase": side["payload"]["countercase"],
             "financial_context": side["payload"].get("financial_context"),
             "invalidation": "The 20-session trend and 50-session moving-average direction disagree, or new company news changes the case.",
-            "selection_rule": "Exchange-directory classified common stock with classification collected within seven days. At least 60 bars, price >= $5, source-observed average daily dollar volume >= $5m, absolute 20-session return >= 2%, and trend agrees with the 50-session average. Compare 14–60-day contracts with absolute delta 0.35–0.65; prefer 30 days and delta 0.5.",
+            "selection_rule": "Exchange-directory classified common stock with classification collected within seven days; last observed daily close within four calendar days. At least 60 bars, price >= $5, source-observed average daily dollar volume >= $5m, absolute 20-session return >= 2%, and trend agrees with the 50-session average. Compare 14–60-day contracts with absolute delta 0.35–0.65; prefer 30 days and delta 0.5.",
             "grading_rule": "Expiration-session underlying direction and hypothetical intrinsic payoff minus the recorded ask cost. No actual fill or pre-expiry option P&L is implied.",
             "feature_as_of": feature.get("as_of"),
+            "history_last_observed_at": feature.get("source_last_observed_at"),
             "listing_metadata": feature.get("listing_metadata"),
             "source": contract["source"],
         },

@@ -119,3 +119,25 @@ test("published option research has concrete economics and a pending public reco
   await row.getByText("Evaluation details").click();
   await expect(row.getByText(/Review horizon:/)).toBeVisible();
 });
+
+test("automatic research and weekly earnings have separate board views", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(
+    page.getByText("Automatically researched setups", { exact: true }),
+  ).toBeVisible();
+  const navigation = page.getByRole("navigation", {
+    name: "Research board views",
+  });
+  await navigation.getByRole("link", { name: "Earnings this week" }).click();
+  await expect(page).toHaveURL(/view=earnings/);
+  await expect(
+    page.getByText("Reporting this week", { exact: true }),
+  ).toBeVisible();
+  await navigation.getByRole("link", { name: "Automatic research" }).click();
+  await expect(page).toHaveURL(/view=radar/);
+  await expect(
+    page.getByText("Automatically researched setups", { exact: true }),
+  ).toBeVisible();
+});

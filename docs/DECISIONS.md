@@ -26,3 +26,8 @@ MOVE_ENGINE_PLAN is the new technical specification. Prior direct user instructi
 ### Public-feed replacement
 
 User requested removing Alpaca after authentication failures. Use existing Finnhub credentials for quotes/news; Nasdaq daily history and Cboe delayed chains require no API key for these endpoints. Respect provider access denials and rate limits. Do not bypass verification challenges or infer redistribution entitlements. SEC filings supply dated fundamental context. Preserve old source records and strategy-version grading. No paid service or order execution enabled.
+
+
+### Discovery and freshness policy
+
+Use measured setup priority for research allocation only: quietness, past price changes, and fair rotation. Require independently dated source history and exchange-directory common-stock classification. Do not interpret rank, agent agreement or indicator count as profit probability. Preserve published records across strategy versions. Return source-unavailable/partial states when a feed fails, and do not label a price refresh as a new research collection.

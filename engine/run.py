@@ -519,36 +519,34 @@ def main() -> None:
                 candidates = store.pages(
                     "latest_price_features", {"order": "symbol.asc"}
                 )
-                eligible = {
-                    row["symbol"]
-                    for row in candidates
-                    if (row["values"].get("last_close") or 0) >= 5
-                    and (row["values"].get("adv_20") or 0) >= 5000000
-                }
                 listed = store.pages(
                     "securities",
                     {
-                        "asset_type": "eq.common_stock",
-                        "select": "symbol",
+                        "select": "symbol,asset_type,listing_metadata",
                         "order": "symbol.asc",
                     },
                 )
-                eligible.intersection_update(row["symbol"] for row in listed)
                 contexts = store.pages(
                     "market_observations",
                     {
-                        "select": "symbol,retrieved_at",
+                        "select": "symbol,research_at:payload->>research_retrieved_at",
                         "feed": "in.(iex,finnhub_free)",
-                        "order": "retrieved_at.desc,id.asc",
+                        "payload->>research_retrieved_at": "not.is.null",
+                        "order": "payload->>research_retrieved_at.desc,id.asc",
                     },
                 )
                 latest = {}
                 for row in contexts:
-                    latest.setdefault(row["symbol"], row["retrieved_at"])
-                symbols = sorted(
-                    eligible,
-                    key=lambda s: (latest.get(s, ""), s),
-                )[:10]
+                    latest.setdefault(row["symbol"], row["research_at"])
+                from engine.discovery import select_candidates
+
+                discovery = select_candidates(candidates, listed, latest, now)
+                symbols = [row["symbol"] for row in discovery]
+            else:
+                discovery = [
+                    {"symbol": symbol, "reasons": ["Explicit company research request"]}
+                    for symbol in symbols
+                ]
             results = {}
             errors = []
             for symbol in symbols:
@@ -584,6 +582,8 @@ def main() -> None:
                     )
             payload = {
                 "processed_symbols": len(results),
+                "discovery": discovery,
+                "discovery_policy": "measured-setup-priority-v1; not a prediction",
                 "provider_errors": errors,
                 "provider_failures": sum(
                     len(value["news"].get("errors", [])) for value in results.values()
@@ -628,7 +628,11 @@ def main() -> None:
                     )
                 )
             )
-        status = "partial" if payload.get("provider_errors") else "completed"
+        status = (
+            "partial"
+            if payload.get("provider_errors") or payload.get("provider_failures")
+            else "completed"
+        )
     except Exception as exc:
         store.write(
             "engine_runs",

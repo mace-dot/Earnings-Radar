@@ -166,7 +166,15 @@ def build_lines(
                             else 0
                         ),
                         "bullets": bullets,
-                        "countercase": cases[opposite][:2] + cases[opposite][3:],
+                        "countercase": cases[opposite][:2]
+                        + cases[opposite][3:]
+                        + (
+                            [
+                                "Split/dividend adjustments are not verified by this history source; measured price changes may reflect a corporate action."
+                            ]
+                            if "adjustment_unspecified" in (feature.get("feed") or "")
+                            else []
+                        ),
                         "financial_context": financial_context,
                         "invalidation": "Review when the price direction reverses, a new filing changes the case, or the event date changes.",
                         "trade": trade,
