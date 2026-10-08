@@ -1,4 +1,5 @@
 "use client";
+import { formatAsOf } from "@/lib/time";
 import { useEffect, useState } from "react";
 export function LivePrice({
   symbol,
@@ -66,8 +67,8 @@ export function LivePrice({
       {quote.as_of && (
         <small>
           {quote.feed ?? "Stored price source"} · source time{" "}
-          {new Date(quote.as_of).toLocaleString()}. Older trades remain labeled
-          with their actual time; this is not a consolidated market quote.
+          {formatAsOf(quote.as_of)}. Older trades remain labeled with their
+          actual time; this is not a consolidated market quote.
         </small>
       )}
     </section>

@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 import { LivePrice } from "@/components/live-price";
 import { sourceURL } from "@/lib/source-url";
 export type Market = {
@@ -74,8 +75,8 @@ export function Context({
               </p>
               <small>
                 {option.source ?? "Stored option source"} · as of{" "}
-                {new Date(option.as_of).toLocaleString()}. This is a cost
-                comparison, not a predicted move.
+                {formatAsOf(option.as_of)}. This is a cost comparison, not a
+                predicted move.
               </small>
             </>
           ) : (
@@ -104,9 +105,8 @@ export function Context({
                     )}
                     <br />
                     <small>
-                      {n.source} · published{" "}
-                      {new Date(n.published_at).toLocaleString()} · retrieved{" "}
-                      {new Date(n.retrieved_at).toLocaleString()}
+                      {n.source} · published {formatAsOf(n.published_at)} ·
+                      retrieved {formatAsOf(n.retrieved_at)}
                     </small>
                   </div>
                 </article>
@@ -131,8 +131,8 @@ export function Context({
               <div>
                 <p>{f.payload.text.slice(0, 300)}</p>
                 <small>
-                  {new Date(f.published_at).toLocaleString()} · collected{" "}
-                  {new Date(f.retrieved_at).toLocaleString()}
+                  {formatAsOf(f.published_at)} · collected{" "}
+                  {formatAsOf(f.retrieved_at)}
                 </small>
               </div>
             </article>

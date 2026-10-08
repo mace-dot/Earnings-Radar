@@ -102,7 +102,15 @@ def test_unscored_symbol_completes_one_queue_cycle(monkeypatch):
     monkeypatch.setattr(run, "score", lambda *args: {})
     monkeypatch.setattr(research, "market_context", lambda *args: {})
     monkeypatch.setattr(research, "news_context", lambda *args: {})
-    assert run.drain_queue(store) == {"claimed": 1, "completed": 1}
+    monkeypatch.setattr(
+        "engine.fundamentals.collect",
+        lambda *args: {"processed_symbols": 1, "provider_errors": []},
+    )
+    assert run.drain_queue(store) == {
+        "claimed": 1,
+        "completed": 1,
+        "provider_errors": [],
+    }
     assert store.finished == [("TEST", None)]
 
 
@@ -168,3 +176,46 @@ def test_future_indicative_leg_rejected():
     ]
     with pytest.raises(ValueError, match="cutoff"):
         chain_estimate("TEST", 100, snapshots, NOW)
+
+
+def test_price_outage_does_not_block_queued_company_research(monkeypatch):
+    from engine import run, research
+    from engine import history_cache, fundamentals
+
+    completed = []
+    called = []
+
+    class Database:
+        def rpc(self, name, payload):
+            return [{"symbol": "FIXTURE"}]
+
+        def read(self, table, query):
+            return [{"symbol": "FIXTURE"}] if table == "securities" else []
+
+        def write(self, *args, **kwargs):
+            pass
+
+        def finish_score(self, symbol, reason=None):
+            completed.append((symbol, reason))
+
+    def unavailable(*args):
+        raise RuntimeError("Fixture transport outage")
+
+    monkeypatch.setattr(run, "enrich", lambda row: row)
+    monkeypatch.setattr(run, "prices", unavailable)
+    monkeypatch.setattr(
+        history_cache,
+        "restore",
+        lambda *args: called.append("cached history") or {"bars": 80},
+    )
+    monkeypatch.setattr(
+        research, "market_context", lambda *args: called.append("market")
+    )
+    monkeypatch.setattr(research, "news_context", lambda *args: called.append("news"))
+    monkeypatch.setattr(fundamentals, "collect", lambda *args: {"provider_errors": []})
+    monkeypatch.setattr(run, "score", lambda *args: called.append("scored"))
+    result = run.drain_queue(Database())
+    assert result["completed"] == 1
+    assert result["provider_errors"][0]["provider"] == "Nasdaq history"
+    assert completed == [("FIXTURE", None)]
+    assert {"cached history", "market", "news", "scored"} <= set(called)

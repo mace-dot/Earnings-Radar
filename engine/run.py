@@ -301,17 +301,39 @@ def calendar_symbols(store: Store, now: datetime) -> list[str]:
     return sorted({row["symbol"] for row in events + queued + existing})
 
 
-def drain_queue(store: Store, limit: int = 10) -> dict[str, int]:
+def drain_queue(store: Store, limit: int = 10) -> dict[str, Any]:
     rows = store.rpc("radar_claim_scores", {"p_limit": limit})
     completed = 0
+    errors = []
     for row in rows:
         symbol = row["symbol"]
         try:
             securities = store.read(
                 "securities", {"symbol": f"eq.{symbol}", "limit": "1"}
             )
-            store.write("securities", [enrich(securities[0])], "symbol")
-            prices(store, datetime.now(timezone.utc), [symbol])
+            try:
+                store.write("securities", [enrich(securities[0])], "symbol")
+            except Exception as exc:
+                errors.append(
+                    {
+                        "symbol": symbol,
+                        "provider": "SEC classification",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+            try:
+                prices(store, datetime.now(timezone.utc), [symbol])
+            except Exception as exc:
+                from engine.history_cache import restore
+
+                errors.append(
+                    {
+                        "symbol": symbol,
+                        "provider": "Nasdaq history",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+                restore(store, [symbol], datetime.now(timezone.utc))
             from engine.research import market_context, news_context
 
             events = store.read(
@@ -325,12 +347,19 @@ def drain_queue(store: Store, limit: int = 10) -> dict[str, int]:
             )
             market_context(store, symbol, events[0]["report_date"] if events else None)
             news_context(store, symbol)
+            from engine.fundamentals import collect
+
+            financials = collect(store, [symbol])
+            errors.extend(
+                {**error, "provider": "SEC fundamentals"}
+                for error in financials["provider_errors"]
+            )
             score(store, datetime.now(timezone.utc), [symbol])
             store.finish_score(symbol)
             completed += 1
         except Exception as exc:
             store.finish_score(symbol, type(exc).__name__)
-    return {"claimed": len(rows), "completed": completed}
+    return {"claimed": len(rows), "completed": completed, "provider_errors": errors}
 
 
 def sectors(store: Store, symbols: list[str], limit: int = 100) -> dict[str, int]:
@@ -607,9 +636,13 @@ def main() -> None:
                     errors.append(
                         {"provider": "Nasdaq history", "error_type": type(exc).__name__}
                     )
+                    from engine.history_cache import restore
+
                     payload["price_collection"] = {
                         "status": "unavailable",
-                        "cached_history_preserved": True,
+                        "cached_history": restore(
+                            store, researched, datetime.now(timezone.utc)
+                        ),
                     }
                 payload["scoring"] = score(
                     store, datetime.now(timezone.utc), researched

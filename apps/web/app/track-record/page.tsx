@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 export const dynamic = "force-dynamic";
 import { read } from "@/lib/db";
 import type { Pick, Outcome } from "@/lib/types";
@@ -45,7 +46,7 @@ export default async function Record() {
                 <span>
                   {p.symbol} · {p.side}
                   <br />
-                  <small>{new Date(p.as_of).toLocaleDateString()}</small>
+                  <small>{formatAsOf(p.as_of)}</small>
                 </span>
                 <span>
                   {outcome?.payload.result ?? "Pending evaluation"}

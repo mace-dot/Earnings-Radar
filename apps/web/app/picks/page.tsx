@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 export const dynamic = "force-dynamic";
 import { read } from "@/lib/db";
 import type { Pick } from "@/lib/types";
@@ -60,7 +61,7 @@ export default async function Picks() {
                 <p>{p.payload.selection_rule}</p>
                 <p>{p.payload.grading_rule}</p>
               </details>
-              <small>Published {new Date(p.as_of).toLocaleString()}</small>
+              <small>Published {formatAsOf(p.as_of)}</small>
             </article>
           ))}
         </div>

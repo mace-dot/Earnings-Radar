@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { read } from "@/lib/db";
@@ -146,7 +147,7 @@ export default async function Stock({
                     {e.timing} · {e.date_status}
                   </small>
                 </span>
-                <small>As of {new Date(e.as_of).toLocaleDateString()}</small>
+                <small>As of {formatAsOf(e.as_of)}</small>
               </div>
             ))
           ) : (
@@ -178,7 +179,7 @@ export default async function Stock({
           </a>
         </p>
         <p className="muted">
-          Verified directory as of {new Date(company.as_of).toLocaleString()}.
+          Verified directory as of {formatAsOf(company.as_of)}.
           {company.asset_type === "common_stock"
             ? " Exchange directory identifies this as common shares."
             : " Common-share classification is not confirmed; company research remains available."}

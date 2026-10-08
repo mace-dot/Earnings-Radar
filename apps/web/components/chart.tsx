@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 import type { Bar } from "@/lib/types";
 export function PriceChart({ bars }: { bars: Bar[] }) {
   if (bars.length < 2)
@@ -53,8 +54,8 @@ export function PriceChart({ bars }: { bars: Bar[] }) {
       </svg>
       <figcaption className="muted">
         {bars.at(-1)?.source} · {bars.at(-1)?.feed} · collected{" "}
-        {new Date(bars.at(-1)?.available_at ?? "").toLocaleString()}. Daily
-        history, not a live entry quote.
+        {formatAsOf(bars.at(-1)?.available_at ?? "")}. Daily history, not a live
+        entry quote.
       </figcaption>
     </figure>
   );

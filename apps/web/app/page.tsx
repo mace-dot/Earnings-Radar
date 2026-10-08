@@ -1,3 +1,4 @@
+import { marketDate } from "@/lib/time";
 import Link from "next/link";
 import { read } from "@/lib/db";
 import type { Security, Line, Side, Event, Pick } from "@/lib/types";
@@ -18,8 +19,8 @@ export default async function Page({
     unavailable = false,
     automaticShown = false;
   try {
-    const today = new Date().toISOString().slice(0, 10);
-    const weekEnd = new Date(Date.now() + 7 * 86400000)
+    const today = marketDate();
+    const weekEnd = new Date(Date.parse(`${today}T12:00:00Z`) + 7 * 86400000)
       .toISOString()
       .slice(0, 10);
     const weekly = term

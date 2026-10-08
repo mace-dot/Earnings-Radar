@@ -1,3 +1,4 @@
+import { formatAsOf } from "@/lib/time";
 export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { read } from "@/lib/db";
@@ -76,7 +77,7 @@ export default async function Moves() {
               </p>
               <small>
                 Sourced daily bars · {c.values.sample_size} observations ·
-                cutoff {new Date(c.as_of).toLocaleString()}
+                cutoff {formatAsOf(c.as_of)}
               </small>
             </article>
           ))}

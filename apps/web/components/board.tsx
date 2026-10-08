@@ -1,4 +1,5 @@
 "use client";
+import { formatAsOf, marketDate } from "@/lib/time";
 import { useState } from "react";
 import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -70,9 +71,7 @@ export function Board({
         {visible.map((c) => {
           const event =
             events.find(
-              (e) =>
-                e.symbol === c.symbol &&
-                e.report_date >= new Date().toISOString().slice(0, 10),
+              (e) => e.symbol === c.symbol && e.report_date >= marketDate(),
             ) ??
             events
               .filter((e) => e.symbol === c.symbol)
@@ -132,9 +131,7 @@ export function Board({
                   ↓ BEAR
                 </Button>
               </div>
-              <small>
-                Identifiers: SEC · {new Date(c.as_of).toLocaleDateString()}
-              </small>
+              <small>Identifiers: SEC · {formatAsOf(c.as_of)}</small>
             </article>
           );
         })}
@@ -314,8 +311,7 @@ export function Board({
                     </p>
                   ))}
                   <small>
-                    Data cutoff:{" "}
-                    {new Date(selected.side.as_of).toLocaleString()}. Last close
+                    Data cutoff: {formatAsOf(selected.side.as_of)}. Last close
                     is not a live entry quote.
                   </small>
                 </section>
