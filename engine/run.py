@@ -137,6 +137,14 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                 "order": "retrieved_at.desc,id.asc",
             },
         )
+        financials = store.pages(
+            "market_observations",
+            {
+                "symbol": membership,
+                "feed": "eq.sec_fundamentals",
+                "order": "retrieved_at.desc,id.asc",
+            },
+        )
         feature_rows, line_rows, side_rows, pick_rows = [], [], [], []
         for symbol in batch:
             matching = [row for row in all_bars if row["symbol"] == symbol]
@@ -185,7 +193,13 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                 not event or estimate.get("report_date") != event["report_date"]
             ):
                 estimate = None
-            lines, sides = build_lines(symbol, feature, now, event, estimate)
+            financial = next(
+                (row for row in financials if row["symbol"] == symbol), None
+            )
+            financial_context = financial["payload"] if financial else None
+            lines, sides = build_lines(
+                symbol, feature, now, event, estimate, financial_context
+            )
             from engine.trade_research import paper_pick, research_is_fresh
 
             research_trades = (
@@ -395,7 +409,7 @@ def main() -> None:
         symbols = calendar_symbols(store, now)
     try:
         if job == "fundamentals":
-            from engine.fundamentals import extract
+            from engine.fundamentals import collect
 
             symbols = symbols or calendar_symbols(store, now)
             securities = store.pages(
@@ -416,32 +430,7 @@ def main() -> None:
                 (r for r in securities if r["symbol"] in symbols and r.get("cik")),
                 key=lambda r: (seen.get(r["symbol"], ""), r["symbol"]),
             )[:10]
-            count, errors = 0, []
-            for row in selected:
-                try:
-                    facts = SEC().fundamentals(row["cik"])
-                    retrieved = datetime.now(timezone.utc)
-                    payload = extract(facts, retrieved)
-                    store.write(
-                        "market_observations",
-                        [
-                            {
-                                "id": f"{row['symbol']}:latest:sec-fundamentals",
-                                "symbol": row["symbol"],
-                                "source": "SEC",
-                                "feed": "sec_fundamentals",
-                                "observed_at": retrieved.isoformat(),
-                                "retrieved_at": retrieved.isoformat(),
-                                "payload": payload,
-                            }
-                        ],
-                    )
-                    count += 1
-                except Exception as exc:
-                    errors.append(
-                        {"symbol": row["symbol"], "error_type": type(exc).__name__}
-                    )
-            payload = {"processed_symbols": count, "provider_errors": errors}
+            payload = collect(store, [row["symbol"] for row in selected])
         elif job == "market_scan":
             from engine.market_scan import market_scan
 
@@ -539,9 +528,25 @@ def main() -> None:
             # Newly discovered names need stored, sourced bars before their lines are scored.
             researched = list(results)
             if researched:
-                payload["price_collection"] = prices(
-                    store, datetime.now(timezone.utc), researched
+                from engine.fundamentals import collect
+
+                payload["fundamentals"] = collect(store, researched)
+                errors.extend(
+                    {**error, "provider": "SEC fundamentals"}
+                    for error in payload["fundamentals"]["provider_errors"]
                 )
+                try:
+                    payload["price_collection"] = prices(
+                        store, datetime.now(timezone.utc), researched
+                    )
+                except Exception as exc:
+                    errors.append(
+                        {"provider": "Nasdaq history", "error_type": type(exc).__name__}
+                    )
+                    payload["price_collection"] = {
+                        "status": "unavailable",
+                        "cached_history_preserved": True,
+                    }
                 payload["scoring"] = score(
                     store, datetime.now(timezone.utc), researched
                 )

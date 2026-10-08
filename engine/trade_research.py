@@ -161,6 +161,7 @@ def paper_pick(
             "trade": trade,
             "bullets": side["payload"]["bullets"],
             "countercase": side["payload"]["countercase"],
+            "financial_context": side["payload"].get("financial_context"),
             "invalidation": "The 20-session trend and 50-session moving-average direction disagree, or new company news changes the case.",
             "selection_rule": "At least 60 bars, price >= $5, source-observed average daily dollar volume >= $5m, absolute 20-session return >= 2%, and trend agrees with the 50-session average. Compare 14–60-day contracts with absolute delta 0.35–0.65; prefer 30 days and delta 0.5.",
             "grading_rule": "Expiration-session underlying direction and hypothetical intrinsic payoff minus the recorded ask cost. No actual fill or pre-expiry option P&L is implied.",

@@ -141,3 +141,39 @@ def extract(facts: dict[str, Any], cutoff: datetime) -> dict[str, Any]:
         "filing_time_precision": "date only; retrieval time is separate",
         "missing": [k for k, v in values.items() if v is None],
     }
+
+
+def collect(store: Any, symbols: list[str]) -> dict[str, Any]:
+    """Collect bounded, comparable filing context for researched names."""
+    from datetime import timezone
+    from engine.providers.sec import SEC
+
+    securities = store.pages(
+        "securities", {"select": "symbol,cik", "order": "symbol.asc"}
+    )
+    count, errors = 0, []
+    wanted = set(symbols[:10])
+    for row in securities:
+        if row["symbol"] not in wanted or not row.get("cik"):
+            continue
+        try:
+            facts = SEC().fundamentals(row["cik"])
+            retrieved = datetime.now(timezone.utc)
+            store.write(
+                "market_observations",
+                [
+                    {
+                        "id": f"{row['symbol']}:latest:sec-fundamentals",
+                        "symbol": row["symbol"],
+                        "source": "SEC",
+                        "feed": "sec_fundamentals",
+                        "observed_at": retrieved.isoformat(),
+                        "retrieved_at": retrieved.isoformat(),
+                        "payload": extract(facts, retrieved),
+                    }
+                ],
+            )
+            count += 1
+        except Exception as exc:
+            errors.append({"symbol": row["symbol"], "error_type": type(exc).__name__})
+    return {"processed_symbols": count, "provider_errors": errors}

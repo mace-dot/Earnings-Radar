@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import Any
-from engine.evidence import directional_cases, magnitude_cases
+from engine.evidence import directional_cases, magnitude_cases, business_cases
 
 KINDS = ("Run-Up", "Earnings Move", "Direction", "IV Ramp", "Drift", "Swing")
 
@@ -13,6 +13,7 @@ def build_lines(
     as_of: datetime,
     event: dict[str, Any] | None = None,
     option_estimate: dict[str, Any] | None = None,
+    financial_context: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     lines, sides = [], []
     momentum = feature.get("return_20")
@@ -25,6 +26,10 @@ def build_lines(
             if magnitude
             else directional_cases(feature)
         )
+        if not magnitude:
+            financial_cases = business_cases(financial_context, as_of)
+            for direction in ("BULL", "BEAR"):
+                cases[direction].extend(financial_cases[direction])
         missing = []
         if kind != "Swing" and not event:
             missing.append("Earnings date missing")
@@ -161,7 +166,8 @@ def build_lines(
                             else 0
                         ),
                         "bullets": bullets,
-                        "countercase": cases[opposite][:2],
+                        "countercase": cases[opposite][:2] + cases[opposite][3:],
+                        "financial_context": financial_context,
                         "invalidation": "Review when the price direction reverses, a new filing changes the case, or the event date changes.",
                         "trade": trade,
                         "badges": badges,

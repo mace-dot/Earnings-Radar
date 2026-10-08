@@ -43,3 +43,24 @@ def test_balance_sheet_dates_must_match():
         NOW,
     )
     assert result["values"]["current_ratio"] is None
+
+
+def test_business_cases_preserve_counterevidence_and_reject_future_collection():
+    from engine.evidence import business_cases
+    from datetime import timedelta
+
+    now = datetime(2026, 10, 8, 14, tzinfo=timezone.utc)
+    context = {
+        "retrieved_at": now.isoformat(),
+        "values": {"quarter_revenue_yoy": 0.12, "quarter_net_margin": -0.03},
+        "periods": {"revenue": {"end": "2026-06-30", "filed": "2026-08-01"}},
+    }
+    cases = business_cases(context, now)
+    assert "+12.0%" in cases["BULL"][0]
+    assert "counterevidence" in cases["BEAR"][0]
+    assert "Losses weaken" in cases["BULL"][1]
+    assert "2026-08-01" in cases["BEAR"][1]
+    assert business_cases(context, now - timedelta(seconds=1)) == {
+        "BULL": [],
+        "BEAR": [],
+    }

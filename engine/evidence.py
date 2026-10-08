@@ -1,6 +1,8 @@
 """Distinct, source-backed descriptive cases. These are not model contributions."""
 
 from typing import Any
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 def directional_cases(feature: dict[str, Any]) -> dict[str, list[str]]:
@@ -88,3 +90,73 @@ def magnitude_cases(
         ),
     ]
     return {"MORE": more, "LESS": less}
+
+
+def business_cases(
+    context: dict[str, Any] | None, as_of: datetime
+) -> dict[str, list[str]]:
+    """Dated accounting context, not a forecast or a solvency verdict."""
+    empty = {"BULL": [], "BEAR": []}
+    if not context:
+        return empty
+    try:
+        retrieved = datetime.fromisoformat(context["retrieved_at"])
+        if retrieved > as_of or as_of - retrieved > timedelta(days=90):
+            return empty
+    except (KeyError, ValueError, TypeError):
+        return empty
+    revenue = context.get("periods", {}).get("revenue")
+    if not revenue or not revenue.get("filed") or not revenue.get("end"):
+        return empty
+    try:
+        if (
+            date.fromisoformat(revenue["filed"])
+            > as_of.astimezone(ZoneInfo("America/New_York")).date()
+            or date.fromisoformat(revenue["end"]) > as_of.date()
+        ):
+            return empty
+    except (TypeError, ValueError):
+        return empty
+    # Values and matched periods were verified by fundamentals.extract.
+    stamp = f"SEC quarter ended {revenue['end']}, filed {revenue['filed']}"
+    values = context.get("values", {})
+    bull, bear = [], []
+    growth = values.get("quarter_revenue_yoy")
+    margin = values.get("quarter_net_margin")
+    if growth is not None:
+        text = f"Revenue changed {growth:+.1%} from the matched year-earlier quarter ({stamp})."
+        bull.append(
+            text
+            + (
+                " Growth supports demand, but may already be priced in."
+                if growth > 0
+                else " An upward case needs evidence that demand is stabilizing."
+            )
+        )
+        bear.append(
+            text
+            + (
+                " Falling sales support a weaker-business case, but expectations may already be low."
+                if growth < 0
+                else " Growth is counterevidence to a simple declining-business thesis."
+            )
+        )
+    if margin is not None:
+        text = f"Net income was {margin:.1%} of revenue in that same quarter ({stamp})."
+        bull.append(
+            text
+            + (
+                " Reported profit supports the business case; it is not a cash-flow measure."
+                if margin > 0
+                else " Losses weaken the business case; cash runway remains unassessed."
+            )
+        )
+        bear.append(
+            text
+            + (
+                " Losses warrant research into cash burn and financing."
+                if margin < 0
+                else " Profit is counterevidence, but debt and valuation still matter."
+            )
+        )
+    return {"BULL": bull, "BEAR": bear}

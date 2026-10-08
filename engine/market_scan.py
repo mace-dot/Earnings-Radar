@@ -63,7 +63,7 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         symbol_error = error or getattr(provider, "errors", {}).get(symbol)
         observed = [o for o in bars if o.symbol == symbol]
         payload = scan_payload(observed, cutoff)
-        status = "failed" if symbol_error else "covered" if observed else "unavailable"
+        status = "failed" if error else "covered" if observed else "unavailable"
         applied = store.finish_market(
             symbol,
             row["lease_token"],
