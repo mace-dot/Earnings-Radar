@@ -6,3 +6,4 @@ black==25.9.0
 ruff==0.14.0
 pytest==8.4.2
 exchange-calendars==4.11.2
+pandas==2.3.3

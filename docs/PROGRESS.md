@@ -213,3 +213,6 @@ Installed migrations 015 and 016. Prospective evaluation snapshots are immutable
 Added a public Forecast testing page with actual progress counters. Local verification: 99 engine tests, six frontend unit tests, lint/format/build and six connected browser flows pass. Supabase database size was 293 MB at the check; anonymous roles have neither raw validation-table reads nor the archive RPC privilege. Source access and Vercel/remote CI require independent verification after push. Meaningful approved probabilities still require real future outcomes and independent review; stock-move testing does not validate contract profitability.
 
 Connected archive RPC filtering was verified with explicit fixture data in a transaction that was rolled back; no fixture records remain in production.
+
+
+Remote verification: Vercel 5437313 is READY and its web CI passed all six browser flows. GitHub history_sync confirmed the key is missing. Remote engine CI and validate exposed an exchange-calendar compatibility failure with a fresh pandas 3 installation (dates treated as non-sessions); the local passing environment used pandas 2.3.3. Pin pandas 2.3.3 alongside exchange-calendars 4.11.2 to make session semantics reproducible. The existing half-day and exact-five-session tests caught this failure and remain enforced.
