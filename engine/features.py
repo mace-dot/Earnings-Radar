@@ -17,6 +17,7 @@ def price_features(bars: list[Observation], as_of: datetime) -> dict[str, Any]:
     output: dict[str, Any] = {
         "version": VERSION,
         "sample_size": len(closes),
+        "source_window_61": [stamp.date().isoformat() for stamp, _ in values[-61:]],
         "last_close": closes[-1] if closes else None,
         "source_last_observed_at": values[-1][0].isoformat() if values else None,
     }

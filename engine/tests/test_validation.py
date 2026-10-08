@@ -9,6 +9,7 @@ from engine.validation import (
     chronological_report,
     split_eligibility,
     HORIZON,
+    calendar,
 )
 
 NOW = datetime(2026, 10, 8, 21, tzinfo=timezone.utc)
@@ -107,7 +108,6 @@ def test_split_control_requires_complete_known_reference():
 
 
 def test_chronological_evaluation_records_calibration_without_self_promotion():
-    from engine.validation import calendar
 
     cal = calendar(NOW)
     sessions = list(cal.sessions_in_range("2026-01-02", "2026-04-30"))[:40]
@@ -154,6 +154,7 @@ def test_snapshots_freeze_real_features_and_reject_unknown_feed():
     class Database:
         saved = []
         feed = "massive_daily_adjusted"
+        gap = False
 
         def pages(self, table, params):
             if table == "securities":
@@ -174,6 +175,13 @@ def test_snapshots_freeze_real_features_and_reject_unknown_feed():
                     "values": {
                         "feed": self.feed,
                         "sample_size": 80,
+                        "source_window_61": [
+                            s.date().isoformat()
+                            for index, s in enumerate(
+                                calendar(NOW).sessions_window("2026-10-08", -61)
+                            )
+                            if not self.gap or index != 10
+                        ],
                         "last_close": 100,
                         "source_last_observed_at": "2026-10-08T20:00:00+00:00",
                         "adv_20": 10000000,
@@ -205,4 +213,8 @@ def test_snapshots_freeze_real_features_and_reject_unknown_feed():
     assert database.saved[0]["payload"]["feature_values"]["last_close"] == 100
     assert database.saved[0]["payload"]["observation_ids"] == ["fixture-observation"]
     database.feed = "unverified_fixture_feed"
+    assert capture(database, NOW)["snapshots"] == 0
+
+    database.feed = "massive_daily_adjusted"
+    database.gap = True
     assert capture(database, NOW)["snapshots"] == 0

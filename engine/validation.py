@@ -78,7 +78,12 @@ def capture(store: Any, now: datetime, limit: int = 500) -> dict[str, Any]:
             != "verified_no_splits"
         ):
             continue
-        if now - listing_time > timedelta(days=7) or f.get("sample_size", 0) < 60:
+        expected_sessions = [
+            s.date().isoformat() for s in cal.sessions_window(today, -61)
+        ]
+        if f.get("source_window_61") != expected_sessions:
+            continue
+        if now - listing_time > timedelta(days=7) or f.get("sample_size", 0) < 61:
             continue
         if (f.get("last_close") or 0) < 5 or (f.get("adv_20") or 0) < 5000000:
             continue
