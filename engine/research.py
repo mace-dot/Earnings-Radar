@@ -8,6 +8,7 @@ from engine.options_estimates import chain_estimate
 from engine.providers.market import Alpaca
 from engine.providers.community import stocktwits
 from engine.store import Store
+from engine.trade_research import long_options
 
 
 def market_context(
@@ -44,6 +45,9 @@ def market_context(
     try:
         observations = provider.snapshots(symbol)
         values = [o.values for o in observations]
+        result["research_trades"] = long_options(
+            symbol, spot, values, datetime.now(timezone.utc)
+        )
         result["options"] = chain_estimate(
             symbol, spot, values, datetime.now(timezone.utc), report_date
         )
@@ -73,12 +77,18 @@ def market_context(
             result["options"].get("call", {}).get("contract"),
             result["options"].get("put", {}).get("contract"),
         }
+        selected.update(
+            trade["contract"]["contract"]
+            for trade in result["research_trades"].values()
+        )
         store.write(
             "option_snapshots", [row for row in rows if row["contract_id"] in selected]
         )
     except Exception as exc:
         result["options"] = {"reason": type(exc).__name__, "implied_move": None}
-    if result.get("options", {}).get("implied_move") is not None:
+    if result.get("options", {}).get("implied_move") is not None or result.get(
+        "research_trades"
+    ):
         result["options"]["report_date"] = report_date
         store.write(
             "market_observations",
@@ -90,7 +100,11 @@ def market_context(
                     "feed": "iex",
                     "observed_at": observed,
                     "retrieved_at": now.isoformat(),
-                    "payload": {**snapshot, "option_estimate": result["options"]},
+                    "payload": {
+                        **snapshot,
+                        "option_estimate": result["options"],
+                        "research_trades": result.get("research_trades", {}),
+                    },
                 }
             ],
         )

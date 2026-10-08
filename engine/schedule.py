@@ -19,6 +19,7 @@ def due_jobs(now: datetime) -> list[str]:
         (12, 0): ["context", "score"],
         (15, 30): ["context", "score"],
         (17, 30): ["prices", "score"],
+        (17, 45): ["grade"],
         (20, 0): ["score"],
     }.get((eastern.hour, eastern.minute), [])
 

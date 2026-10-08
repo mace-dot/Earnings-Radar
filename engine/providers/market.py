@@ -74,23 +74,36 @@ class Alpaca:
         raise RuntimeError("Price pagination exceeded bounded capacity")
 
     def snapshots(self, symbol: str) -> list[Observation]:
-        response = self.client.get(
-            f"https://data.alpaca.markets/v1beta1/options/snapshots/{symbol}",
-            params={"feed": "indicative", "limit": 1000},
-        )
-        response.raise_for_status()
-        now = datetime.now(timezone.utc)
-        return [
-            Observation(
-                symbol,
-                now,
-                now,
-                "Alpaca",
-                {"contract_id": contract, **value},
-                "indicative",
+        output = []
+        token = None
+        for _ in range(20):
+            params: dict[str, Any] = {"feed": "indicative", "limit": 1000}
+            if token:
+                params["page_token"] = token
+            response = self.client.get(
+                f"https://data.alpaca.markets/v1beta1/options/snapshots/{symbol}",
+                params=params,
             )
-            for contract, value in response.json().get("snapshots", {}).items()
-        ]
+            response.raise_for_status()
+            data = response.json()
+            now = datetime.now(timezone.utc)
+            output.extend(
+                Observation(
+                    symbol,
+                    now,
+                    now,
+                    "Alpaca",
+                    {"contract_id": contract, **value},
+                    "indicative",
+                )
+                for contract, value in data.get("snapshots", {}).items()
+            )
+            token = data.get("next_page_token")
+            if not token:
+                return output
+        raise RuntimeError(
+            "Option pagination exceeded capacity; partial chain not used"
+        )
 
 
 class Finnhub:

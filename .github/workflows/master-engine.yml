@@ -6,7 +6,7 @@ on:
         description: Bounded engine job
         required: true
         type: choice
-        options: [universe, calendar, prices, score, queue, sectors, context, doctor]
+        options: [universe, calendar, prices, score, queue, sectors, context, grade, doctor]
   schedule:
     - cron: '*/5 * * * *'
     - cron: '0 10,11 * * 1-5'

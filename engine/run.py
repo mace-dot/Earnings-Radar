@@ -128,7 +128,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
             "market_observations",
             {"symbol": membership, "order": "retrieved_at.desc,id.asc"},
         )
-        feature_rows, line_rows, side_rows = [], [], []
+        feature_rows, line_rows, side_rows, pick_rows = [], [], [], []
         for symbol in batch:
             bars = [row for row in all_bars if row["symbol"] == symbol][-500:]
             observations = [
@@ -175,6 +175,32 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
             ):
                 estimate = None
             lines, sides = build_lines(symbol, feature, now, event, estimate)
+            from engine.trade_research import paper_pick
+
+            research_trades = (
+                (context or {}).get("payload", {}).get("research_trades", {})
+            )
+            for side in sides:
+                line = next(item for item in lines if item["id"] == side["line_id"])
+                trade = research_trades.get(side["side"])
+                # A fresh collection must confirm the chain; old cached research cannot create new picks.
+                if (
+                    line["kind"] == "Swing"
+                    and trade
+                    and context
+                    and now - datetime.fromisoformat(context["retrieved_at"])
+                    < timedelta(hours=1)
+                ):
+                    side["payload"]["trade"] = trade
+                    pick = paper_pick(
+                        line,
+                        side,
+                        feature,
+                        [row["id"] for row in bars] + [context["id"]],
+                        now,
+                    )
+                    if pick:
+                        pick_rows.append(pick)
             for line in lines:
                 line["payload"]["metrics"] = {
                     key: feature.get(key)
@@ -196,6 +222,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         store.write("lines", line_rows)
         for index in range(0, len(side_rows), 400):
             store.write("line_sides", side_rows[index : index + 400])
+        store.write("picks", pick_rows, immutable=True)
     return {
         "lines": count,
         "symbols": len(symbols),
@@ -273,6 +300,48 @@ def sectors(store: Store, symbols: list[str], limit: int = 100) -> dict[str, int
     return {"sector_enriched": changed}
 
 
+def grade(store: Store, now: datetime) -> dict[str, int]:
+    from engine.trade_research import expiration_outcome, VERSION
+
+    picks = store.pages(
+        "picks",
+        {
+            "expires_at": f"lte.{now.isoformat()}",
+            "strategy_version": f"eq.{VERSION}",
+            "order": "id.asc",
+        },
+    )
+    outcomes = {
+        row["pick_id"]
+        for row in store.pages(
+            "pick_outcomes", {"select": "pick_id", "order": "id.asc"}
+        )
+    }
+    pending = [p for p in picks if p["id"] not in outcomes]
+    if pending:
+        prices(store, now, sorted({p["symbol"] for p in pending})[:100])
+    graded = 0
+    for pick in pending[:100]:
+        expiry = pick["payload"]["trade"]["contract"]["expiry"]
+        bars = store.read(
+            "daily_bars",
+            {
+                "symbol": f"eq.{pick['symbol']}",
+                "session_date": f"eq.{expiry}",
+                "feed": "eq.iex_split_adjusted",
+                "order": "available_at.desc",
+                "limit": "1",
+            },
+        )
+        if not bars:
+            continue
+        store.write(
+            "pick_outcomes", [expiration_outcome(pick, bars[0], now)], immutable=True
+        )
+        graded += 1
+    return {"graded": graded, "awaiting_expiration_close": len(pending) - graded}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -287,6 +356,7 @@ def main() -> None:
             "doctor",
             "sectors",
             "history_backfill",
+            "grade",
         ],
     )
     parser.add_argument("--symbols", default="")
@@ -305,7 +375,9 @@ def main() -> None:
     if not symbols and job in {"prices", "score", "context", "sectors"}:
         symbols = calendar_symbols(store, now)
     try:
-        if job == "history_backfill":
+        if job == "grade":
+            payload = grade(store, now)
+        elif job == "history_backfill":
             from engine.providers.history import alpha_earnings
 
             symbols = symbols or calendar_symbols(store, now)[:1]
@@ -329,20 +401,61 @@ def main() -> None:
                     if (row["values"].get("last_close") or 0) >= 5
                     and (row["values"].get("adv_20") or 0) >= 5000000
                 }
-                symbols = [symbol for symbol in symbols if symbol in eligible][:100]
-            results = {
-                symbol: {
-                    "market": market_context(store, symbol),
-                    "news": news_context(store, symbol),
-                }
-                for symbol in symbols
-            }
+                contexts = store.pages(
+                    "market_observations",
+                    {
+                        "select": "symbol,retrieved_at",
+                        "order": "retrieved_at.desc,id.asc",
+                    },
+                )
+                latest = {}
+                for row in contexts:
+                    latest.setdefault(row["symbol"], row["retrieved_at"])
+                symbols = sorted(
+                    (symbol for symbol in symbols if symbol in eligible),
+                    key=lambda s: (latest.get(s, ""), s),
+                )[:10]
+            results = {}
+            errors = []
+            for symbol in symbols:
+                try:
+                    events = store.read(
+                        "earnings_events",
+                        {
+                            "symbol": f"eq.{symbol}",
+                            "report_date": f"gte.{now.date()}",
+                            "order": "report_date.asc",
+                            "limit": "1",
+                        },
+                    )
+                    results[symbol] = {
+                        "market": market_context(
+                            store, symbol, events[0]["report_date"] if events else None
+                        ),
+                        "news": news_context(store, symbol),
+                    }
+                except Exception as exc:
+                    import httpx
+
+                    errors.append(
+                        {
+                            "symbol": symbol,
+                            "error_type": type(exc).__name__,
+                            "http_status": (
+                                exc.response.status_code
+                                if isinstance(exc, httpx.HTTPStatusError)
+                                else None
+                            ),
+                        }
+                    )
             payload = {
                 "processed_symbols": len(results),
+                "provider_errors": errors,
                 "provider_failures": sum(
                     len(value["news"].get("errors", [])) for value in results.values()
                 ),
             }
+            score(store, datetime.now(timezone.utc), symbols)
         else:
             payload = (
                 universe(store)

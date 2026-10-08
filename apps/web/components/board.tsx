@@ -4,6 +4,7 @@ import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { RequestScore } from "@/components/request-score";
 import { Button } from "@/components/ui/button";
+import { ContractDetails } from "@/components/contract-details";
 import type { Security, Line, Side, Event } from "@/lib/types";
 export function Board({
   companies,
@@ -257,6 +258,7 @@ export function Board({
                 <section className="panel">
                   <h3>{selected.side.payload.trade.instrument}</h3>
                   <p>{selected.side.payload.trade.explanation}</p>
+                  <ContractDetails trade={selected.side.payload.trade} />
                   {selected.side.payload.trade.entry !== null && (
                     <p>
                       Last close: $

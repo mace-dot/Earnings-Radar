@@ -31,6 +31,21 @@ export type Trade = {
   max_loss: number | null;
   exit: string;
   missing: string[];
+  contract?: {
+    contract: string;
+    kind: string;
+    strike: number;
+    expiry: string;
+    bid: number;
+    ask: number;
+    delta: number;
+    cost: number;
+    breakeven: number;
+    quote_as_of: string;
+    source: string;
+    executable: boolean;
+    deliverable_verified: boolean;
+  };
   estimate?: {
     strike: number;
     expiry: string;
@@ -85,10 +100,32 @@ export type Pick = {
   symbol: string;
   side: string;
   as_of: string;
-  payload: { line_kind?: string; tier?: string; entry?: number; feed?: string };
+  expires_at: string;
+  payload: {
+    line_kind?: string;
+    tier?: string;
+    entry?: number;
+    feed?: string;
+    status?: string;
+    trade?: Trade;
+    bullets?: string[];
+    countercase?: string[];
+    invalidation?: string;
+    selection_rule?: string;
+    grading_rule?: string;
+  };
 };
 export type Outcome = {
   pick_id: string;
   graded_at: string;
-  payload: { return_fraction?: number; result?: string; reason?: string };
+  source: string;
+  payload: {
+    return_fraction?: number;
+    result?: string;
+    reason?: string;
+    direction_result?: string;
+    hypothetical_pnl?: number;
+    hypothetical_return?: number;
+    note?: string;
+  };
 };
