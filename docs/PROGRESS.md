@@ -219,3 +219,6 @@ Remote verification: Vercel 5437313 is READY and its web CI passed all six brows
 
 
 The pinned e06efd3 release passed remote CI and the GitHub validate job completed successfully. Final validation eligibility also requires the actual last 61 source-session dates to match the exchange calendar; a missing intermediate session cannot masquerade as a continuous volatility sample. The snapshot regression verifies that a gap blocks only that evaluation case.
+
+
+The user added the Massive secret in a GitHub environment. A fresh dispatch still reported the key missing because the research job had no environment attached. The existing Production environment has no protection rules or branch restriction in its metadata. Attach the worker to Production so environment-scoped credentials are visible, while repository secrets remain usable. Secret metadata/value access was not granted; no key was read or moved.
