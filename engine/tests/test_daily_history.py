@@ -21,20 +21,24 @@ def test_exchange_close_accounts_for_half_days():
 def test_archive_reuses_original_availability_and_source():
     class Database:
         def rpc(self, name, payload):
-            assert name == "radar_history_bars"
+            assert name == "radar_history_packs"
             return [
                 {
-                    "symbol": "FIXTURE",
                     "session_date": "2026-10-07",
                     "source": "Massive",
                     "feed": "massive_daily_adjusted",
                     "observed_at": "2026-10-07T20:00:00+00:00",
                     "available_at": NOW.isoformat(),
-                    "open": 99,
-                    "high": 102,
-                    "low": 98,
-                    "close": 100,
-                    "volume": 1000,
+                    "results": [
+                        {
+                            "T": "FIXTURE",
+                            "o": 99,
+                            "h": 102,
+                            "l": 98,
+                            "c": 100,
+                            "v": 1000,
+                        }
+                    ],
                 }
             ]
 
@@ -156,3 +160,46 @@ def test_provider_diagnostic_reports_status_without_exposing_credentials_or_body
     assert "HTTP 403" in message
     assert "fixture-secret" not in message
     assert "fixture-private" not in message
+
+
+def test_serial_bootstrap_stops_at_completion_and_preserves_totals(monkeypatch):
+    from engine.providers.daily_history import synchronize_many
+
+    results = iter(
+        [
+            {
+                "sessions": ["fixture-day-1"],
+                "observations": 10,
+                "provider_errors": [],
+                "remaining_sessions": 1,
+            },
+            {
+                "sessions": ["fixture-day-2"],
+                "observations": 12,
+                "provider_errors": [],
+                "remaining_sessions": 0,
+            },
+        ]
+    )
+    monkeypatch.setattr(
+        "engine.providers.daily_history.synchronize", lambda *a: next(results)
+    )
+    result = synchronize_many(None, 30)
+    assert result["observations"] == 22
+    assert result["sessions"] == ["fixture-day-1", "fixture-day-2"]
+    assert result["remaining_sessions"] == 0
+
+
+def test_serial_bootstrap_does_not_retry_entitlement_failure(monkeypatch):
+    from engine.providers.daily_history import synchronize_many
+
+    calls = []
+
+    def denied(*args):
+        calls.append(1)
+        raise RuntimeError("fixture entitlement failure")
+
+    monkeypatch.setattr("engine.providers.daily_history.synchronize", denied)
+    with pytest.raises(RuntimeError, match="fixture entitlement"):
+        synchronize_many(None, 30)
+    assert len(calls) == 1

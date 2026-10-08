@@ -44,9 +44,32 @@ class Massive:
         self.errors: dict[str, str] = {}
 
     def bars(self, symbols: list[str], start: str, end: str) -> list[Observation]:
-        rows = self.store.rpc(
-            "radar_history_bars", {"p_symbols": symbols, "p_start": start, "p_end": end}
+        packs = self.store.rpc(
+            "radar_history_packs",
+            {"p_symbols": symbols, "p_start": start, "p_end": end},
         )
+        rows = [
+            {
+                **{
+                    key: pack[key]
+                    for key in (
+                        "session_date",
+                        "observed_at",
+                        "available_at",
+                        "source",
+                        "feed",
+                    )
+                },
+                "symbol": bar["T"],
+                "open": bar.get("o"),
+                "high": bar.get("h"),
+                "low": bar.get("l"),
+                "close": bar["c"],
+                "volume": bar.get("v"),
+            }
+            for pack in packs
+            for bar in pack["results"]
+        ]
         observed = {r["symbol"] for r in rows}
         for symbol in symbols:
             if symbol not in observed:
@@ -221,3 +244,24 @@ def split_reference(store: Any, now: datetime) -> bool:
         immutable=True,
     )
     return True
+
+
+def synchronize_many(store: Any, batches: int) -> dict[str, Any]:
+    """Resume serially; errors abort while successfully archived sessions survive."""
+    if not 1 <= batches <= 100:
+        raise ValueError("History batches must be between 1 and 100")
+    payload: dict[str, Any] = {
+        "sessions": [],
+        "observations": 0,
+        "provider_errors": [],
+        "feed": FEED,
+    }
+    for _ in range(batches):
+        result = synchronize(store, datetime.now(timezone.utc))
+        payload["sessions"].extend(result["sessions"])
+        payload["observations"] += result["observations"]
+        payload["provider_errors"].extend(result["provider_errors"])
+        payload["remaining_sessions"] = result["remaining_sessions"]
+        if not result["sessions"] or not result["remaining_sessions"]:
+            break
+    return payload

@@ -537,18 +537,9 @@ def main() -> None:
 
             payload = validate(store, now)
         elif job == "history_sync":
-            from engine.providers.daily_history import synchronize
+            from engine.providers.daily_history import synchronize_many
 
-            payload = {"sessions": [], "observations": 0, "provider_errors": []}
-            for _ in range(args.batches):
-                result = synchronize(store, datetime.now(timezone.utc))
-                payload["sessions"].extend(result["sessions"])
-                payload["observations"] += result["observations"]
-                payload["provider_errors"].extend(result["provider_errors"])
-                payload["feed"] = result["feed"]
-                payload["remaining_sessions"] = result["remaining_sessions"]
-                if not result["sessions"] or not result["remaining_sessions"]:
-                    break
+            payload = synchronize_many(store, args.batches)
         elif job == "market_scan":
             from engine.market_scan import market_scan
 
@@ -566,7 +557,10 @@ def main() -> None:
             payload = totals
             if totals["failed"]:
                 payload["provider_errors"] = [
-                    {"provider": "Nasdaq history", "failed_symbols": totals["failed"]}
+                    {
+                        "provider": "Configured daily history",
+                        "failed_symbols": totals["failed"],
+                    }
                 ]
         elif job == "grade":
             payload = grade(store, now)

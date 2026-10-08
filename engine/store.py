@@ -121,6 +121,7 @@ class Store:
             "radar_claim_scores",
             "radar_claim_market",
             "radar_history_bars",
+            "radar_history_packs",
         }:
             raise ValueError("Unknown RPC")
         if name == "radar_history_bars":
