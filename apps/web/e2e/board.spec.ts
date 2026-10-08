@@ -91,7 +91,7 @@ test("live-price relay rejects other origins and returns a real observed trade",
   expect(response.status()).toBe(200);
   const quote = await response.json();
   expect(quote.price).toBeGreaterThan(0);
-  expect(quote.feed).toBe("IEX");
+  expect(quote.feed).toBe("Finnhub");
   expect(Number.isFinite(Date.parse(quote.as_of))).toBe(true);
 });
 

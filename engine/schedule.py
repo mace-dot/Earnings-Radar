@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 from engine.store import Store
 
 SLOTS = {
-    (6, 0): ["universe", "sectors"],
+    (6, 0): ["universe", "sectors", "fundamentals"],
     (6, 15): ["calendar"],
     (18, 0): ["calendar"],
     (9, 45): ["context", "score"],
@@ -60,6 +60,7 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
             "context",
             "score",
             "grade",
+            "fundamentals",
         )
         if job in due and (job not in completed or completed[job] < due[job])
     ]
@@ -83,8 +84,18 @@ def main() -> None:
         jobs = ["queue", "market_scan", *pending_jobs(now, runs)]
     if not jobs:
         print("No job due at this Eastern time")
+    failed = []
     for item in jobs:
-        subprocess.run([sys.executable, "-m", "engine.run", item], check=True)
+        result = subprocess.run([sys.executable, "-m", "engine.run", item], check=False)
+        if result.returncode:
+            failed.append(item)
+    if failed:
+        print(
+            "Failed jobs: "
+            + ", ".join(failed)
+            + "; independent jobs were still attempted"
+        )
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

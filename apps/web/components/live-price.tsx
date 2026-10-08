@@ -4,14 +4,17 @@ export function LivePrice({
   symbol,
   initialPrice,
   initialTime,
+  initialSource,
 }: {
   symbol: string;
   initialPrice?: number;
   initialTime?: string;
+  initialSource?: string;
 }) {
   const [quote, setQuote] = useState({
     price: initialPrice,
     as_of: initialTime,
+    feed: initialSource,
   });
   const [message, setMessage] = useState("Checking the latest observed trade…");
   useEffect(() => {
@@ -27,8 +30,10 @@ export function LivePrice({
         const data = await response.json();
         if (active) {
           if (typeof data.price === "number") {
-            setQuote({ price: data.price, as_of: data.as_of });
-            setMessage("Updates while this page is open · partial IEX feed");
+            setQuote({ price: data.price, as_of: data.as_of, feed: data.feed });
+            setMessage(
+              "Updates while this page is open · source timestamp shown",
+            );
           } else {
             setMessage(
               "Refresh unavailable; showing the last stored observation.",
@@ -60,9 +65,9 @@ export function LivePrice({
       <p>{message}</p>
       {quote.as_of && (
         <small>
-          Alpaca · trade time {new Date(quote.as_of).toLocaleString()}. Older
-          trades remain labeled with their actual time; this is not a
-          consolidated market quote.
+          {quote.feed ?? "Stored price source"} · source time{" "}
+          {new Date(quote.as_of).toLocaleString()}. Older trades remain labeled
+          with their actual time; this is not a consolidated market quote.
         </small>
       )}
     </section>

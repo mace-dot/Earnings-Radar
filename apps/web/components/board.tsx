@@ -102,7 +102,8 @@ export function Board({
                   </strong>
                   <br />
                   <small>
-                    Alpaca IEX · 10 vs. 60 sessions · not a move probability
+                    Sourced daily history · 10 vs. 60 sessions · not a move
+                    probability
                   </small>
                 </p>
               )}

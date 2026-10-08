@@ -1,12 +1,14 @@
 import { LivePrice } from "@/components/live-price";
 import { sourceURL } from "@/lib/source-url";
 export type Market = {
+  source: string;
   observed_at: string;
   retrieved_at: string;
   feed: string;
   payload: {
     latestTrade?: { p: number; t: string };
     option_estimate?: {
+      source?: string;
       implied_move: number;
       event_specific: boolean;
       expiry: string;
@@ -53,6 +55,7 @@ export function Context({
       <div className="two-column">
         <LivePrice
           symbol={symbol}
+          initialSource={latest?.source}
           initialPrice={latest?.payload.latestTrade?.p}
           initialTime={latest?.observed_at}
         />
@@ -70,7 +73,7 @@ export function Context({
                   : "General expiry range; not an earnings-move estimate"}
               </p>
               <small>
-                Alpaca indicative · as of{" "}
+                {option.source ?? "Stored option source"} · as of{" "}
                 {new Date(option.as_of).toLocaleString()}. This is a cost
                 comparison, not a predicted move.
               </small>

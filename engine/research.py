@@ -5,7 +5,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from engine.options_estimates import chain_estimate
-from engine.providers.market import Alpaca
+from engine.providers.market import Finnhub
+from engine.providers.public_market import Cboe
 from engine.providers.community import stocktwits
 from engine.store import Store
 from engine.trade_research import long_options
@@ -14,34 +15,30 @@ from engine.trade_research import long_options
 def market_context(
     store: Store, symbol: str, report_date: str | None = None
 ) -> dict[str, Any]:
-    provider = Alpaca()
+    provider = Cboe()
     now = datetime.now(timezone.utc)
-    response = provider.client.get(
-        "https://data.alpaca.markets/v2/stocks/snapshots",
-        params={"symbols": symbol, "feed": "iex"},
-    )
-    response.raise_for_status()
-    snapshot = response.json().get(symbol, {})
-    trade = snapshot.get("latestTrade", {})
-    spot = trade.get("p")
-    observed = trade.get("t")
-    if not spot or not observed:
-        return {"reason": "No current IEX trade observed"}
+    trade = Finnhub().quote(symbol)
+    snapshot = {"latestTrade": trade, "price_source": "Finnhub"}
+    spot, observed = trade["p"], trade["t"]
     store.write(
         "market_observations",
         [
             {
-                "id": f"{symbol}:{observed}:iex",
+                "id": f"{symbol}:{observed}:finnhub",
                 "symbol": symbol,
-                "source": "Alpaca",
-                "feed": "iex",
+                "source": "Finnhub",
+                "feed": "finnhub_free",
                 "observed_at": observed,
                 "retrieved_at": now.isoformat(),
                 "payload": snapshot,
             }
         ],
     )
-    result: dict[str, Any] = {"spot": spot, "spot_as_of": observed, "feed": "iex"}
+    result: dict[str, Any] = {
+        "spot": spot,
+        "spot_as_of": observed,
+        "feed": "finnhub_free",
+    }
     try:
         observations = provider.snapshots(symbol)
         values = [o.values for o in observations]
@@ -50,6 +47,12 @@ def market_context(
         )
         result["options"] = chain_estimate(
             symbol, spot, values, datetime.now(timezone.utc), report_date
+        )
+        result["options"].update(
+            {
+                "source": "Cboe delayed snapshot",
+                "quote_kind": "Delayed snapshot estimate; individual quote age unknown",
+            }
         )
         rows = []
         for item in values:
@@ -67,8 +70,8 @@ def market_context(
                     "contract_id": contract["contract"],
                     "expiry": contract["expiry"],
                     "strike": contract["strike"],
-                    "source": "Alpaca",
-                    "feed": "indicative",
+                    "source": "Cboe",
+                    "feed": "cboe_delayed",
                     "as_of": now.isoformat(),
                     "payload": item,
                 }
@@ -94,16 +97,17 @@ def market_context(
             "market_observations",
             [
                 {
-                    "id": f"{symbol}:{observed}:iex",
+                    "id": f"{symbol}:{observed}:finnhub",
                     "symbol": symbol,
-                    "source": "Alpaca",
-                    "feed": "iex",
+                    "source": "Finnhub",
+                    "feed": "finnhub_free",
                     "observed_at": observed,
                     "retrieved_at": now.isoformat(),
                     "payload": {
                         **snapshot,
                         "option_estimate": result["options"],
                         "research_trades": result.get("research_trades", {}),
+                        "research_retrieved_at": now.isoformat(),
                     },
                 }
             ],
@@ -112,35 +116,43 @@ def market_context(
 
 
 def news_context(store: Store, symbol: str) -> dict[str, Any]:
-    provider = Alpaca()
+    provider = Finnhub()
     errors = []
     count = 0
     try:
         response = provider.client.get(
-            "https://data.alpaca.markets/v1beta1/news",
-            params={"symbols": symbol, "limit": 50, "include_content": "false"},
+            "https://finnhub.io/api/v1/company-news",
+            params={
+                "symbol": symbol,
+                "from": (datetime.now(timezone.utc) - timedelta(days=7))
+                .date()
+                .isoformat(),
+                "to": datetime.now(timezone.utc).date().isoformat(),
+            },
         )
         response.raise_for_status()
         now = datetime.now(timezone.utc).isoformat()
         rows = [
             {
-                "id": f"alpaca:{item['id']}:{symbol}",
+                "id": f"finnhub:{item['id']}:{symbol}",
                 "symbol": symbol,
                 "headline": str(item["headline"])[:1000],
                 "url": item["url"],
-                "source": item.get("source", "Alpaca news"),
-                "published_at": item["created_at"],
+                "source": item.get("source", "Finnhub news"),
+                "published_at": datetime.fromtimestamp(
+                    item["datetime"], timezone.utc
+                ).isoformat(),
                 "retrieved_at": now,
                 "payload": {"coverage": "bounded_recent_sample"},
             }
-            for item in response.json().get("news", [])
-            if datetime.fromisoformat(item["created_at"].replace("Z", "+00:00"))
+            for item in response.json()[:50]
+            if datetime.fromtimestamp(item["datetime"], timezone.utc)
             >= datetime.now(timezone.utc) - timedelta(days=7)
         ]
         store.write("news_items", rows)
         count = len(rows)
     except Exception as exc:
-        errors.append({"provider": "Alpaca news", "reason": type(exc).__name__})
+        errors.append({"provider": "Finnhub news", "reason": type(exc).__name__})
     forums = None
     try:
         rows = stocktwits(symbol)

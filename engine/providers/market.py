@@ -132,3 +132,16 @@ class Finnhub:
             for item in data.get("earningsCalendar", [])
             if item.get("symbol") and item.get("date")
         ]
+
+    def quote(self, symbol: str) -> dict[str, Any]:
+        response = self.client.get(
+            "https://finnhub.io/api/v1/quote", params={"symbol": symbol}
+        )
+        response.raise_for_status()
+        value = response.json()
+        if not value.get("c") or not value.get("t"):
+            raise ValueError("No sourced quote available")
+        return {
+            "p": value["c"],
+            "t": datetime.fromtimestamp(value["t"], timezone.utc).isoformat(),
+        }

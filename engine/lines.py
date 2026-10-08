@@ -45,6 +45,8 @@ def build_lines(
         badges = [*missing, "Model not validated"]
         if (feature.get("feed") or "").startswith("iex"):
             badges.append("Partial market feed")
+        if "adjustment_unspecified" in (feature.get("feed") or ""):
+            badges.append("Historical corporate-action adjustment basis unverified")
         report = event["report_date"] if event else "date unconfirmed"
         line_id = f"{symbol}:{kind}:{as_of.date().isoformat()}"
         favored = (

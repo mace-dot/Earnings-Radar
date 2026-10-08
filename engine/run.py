@@ -11,7 +11,8 @@ from engine.move_features import setup_features
 from engine.sectors import enrich
 from engine.lines import build_lines
 from engine.providers.base import Observation
-from engine.providers.market import Alpaca, Finnhub
+from engine.providers.market import Finnhub
+from engine.providers.public_market import Nasdaq
 from engine.providers.alpha_vantage import AlphaVantage
 from engine.providers.sec import SEC
 from engine.store import Store
@@ -72,7 +73,7 @@ def calendar(store: Store, now: datetime) -> dict[str, Any]:
 
 def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
     observations = []
-    provider = Alpaca()
+    provider = Nasdaq()
     for offset in range(0, len(symbols), 100):
         observations.extend(
             provider.bars(
@@ -102,7 +103,11 @@ def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         )
     for offset in range(0, len(rows), 400):
         store.write("daily_bars", rows[offset : offset + 400])
-    return {"bars": len(rows), "symbols": symbols, "feed": "iex_split_adjusted"}
+    return {
+        "bars": len(rows),
+        "symbols": symbols,
+        "feed": "nasdaq_daily_adjustment_unspecified",
+    }
 
 
 def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
@@ -114,7 +119,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         all_bars = store.pages(
             "daily_bars",
             {"symbol": membership, "order": "symbol.asc,session_date.asc"},
-            capacity=60000,
+            capacity=100000,
         )
         all_events = store.pages(
             "earnings_events",
@@ -126,11 +131,17 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         )
         contexts = store.pages(
             "market_observations",
-            {"symbol": membership, "order": "retrieved_at.desc,id.asc"},
+            {
+                "symbol": membership,
+                "feed": "in.(iex,finnhub_free)",
+                "order": "retrieved_at.desc,id.asc",
+            },
         )
         feature_rows, line_rows, side_rows, pick_rows = [], [], [], []
         for symbol in batch:
-            bars = [row for row in all_bars if row["symbol"] == symbol][-500:]
+            matching = [row for row in all_bars if row["symbol"] == symbol]
+            preferred = [row for row in matching if row["source"] == "Nasdaq"]
+            bars = (preferred or matching)[-500:]
             observations = [
                 Observation(
                     symbol,
@@ -175,7 +186,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
             ):
                 estimate = None
             lines, sides = build_lines(symbol, feature, now, event, estimate)
-            from engine.trade_research import paper_pick
+            from engine.trade_research import paper_pick, research_is_fresh
 
             research_trades = (
                 (context or {}).get("payload", {}).get("research_trades", {})
@@ -188,8 +199,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                     line["kind"] == "Swing"
                     and trade
                     and context
-                    and now - datetime.fromisoformat(context["retrieved_at"])
-                    < timedelta(hours=1)
+                    and research_is_fresh(context["payload"], now)
                 ):
                     side["payload"]["trade"] = trade
                     pick = paper_pick(
@@ -214,7 +224,9 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                     )
                 }
                 line["payload"]["option_estimate"] = estimate
-                line["payload"]["source"] = "Alpaca IEX daily bars"
+                line["payload"][
+                    "source"
+                ] = "Nasdaq / retained historical source; see each observation"
             line_rows.extend(lines)
             side_rows.extend(sides)
             count += len(lines)
@@ -242,7 +254,9 @@ def calendar_symbols(store: Store, now: datetime) -> list[str]:
         },
     )
     queued = store.pages("score_queue", {"select": "symbol", "order": "symbol.asc"})
-    existing = store.pages("lines", {"select": "symbol", "order": "id.asc"})
+    existing = store.pages(
+        "current_line_symbols", {"select": "symbol", "order": "symbol.asc"}
+    )
     return sorted({row["symbol"] for row in events + queued + existing})
 
 
@@ -301,13 +315,13 @@ def sectors(store: Store, symbols: list[str], limit: int = 100) -> dict[str, int
 
 
 def grade(store: Store, now: datetime) -> dict[str, int]:
-    from engine.trade_research import expiration_outcome, VERSION
+    from engine.trade_research import expiration_outcome, SUPPORTED_VERSIONS
 
     picks = store.pages(
         "picks",
         {
             "expires_at": f"lte.{now.isoformat()}",
-            "strategy_version": f"eq.{VERSION}",
+            "strategy_version": "in.(" + ",".join(SUPPORTED_VERSIONS) + ")",
             "order": "id.asc",
         },
     )
@@ -328,7 +342,7 @@ def grade(store: Store, now: datetime) -> dict[str, int]:
             {
                 "symbol": f"eq.{pick['symbol']}",
                 "session_date": f"eq.{expiry}",
-                "feed": "eq.iex_split_adjusted",
+                "feed": "eq.nasdaq_daily_adjustment_unspecified",
                 "order": "available_at.desc",
                 "limit": "1",
             },
@@ -358,6 +372,7 @@ def main() -> None:
             "history_backfill",
             "grade",
             "market_scan",
+            "fundamentals",
         ],
     )
     parser.add_argument("--symbols", default="")
@@ -379,7 +394,55 @@ def main() -> None:
     if not symbols and job in {"prices", "score", "context", "sectors"}:
         symbols = calendar_symbols(store, now)
     try:
-        if job == "market_scan":
+        if job == "fundamentals":
+            from engine.fundamentals import extract
+
+            symbols = symbols or calendar_symbols(store, now)
+            securities = store.pages(
+                "securities", {"select": "symbol,cik", "order": "symbol.asc"}
+            )
+            latest = store.pages(
+                "market_observations",
+                {
+                    "feed": "eq.sec_fundamentals",
+                    "select": "symbol,retrieved_at",
+                    "order": "retrieved_at.desc,id.asc",
+                },
+            )
+            seen = {}
+            for row in latest:
+                seen.setdefault(row["symbol"], row["retrieved_at"])
+            selected = sorted(
+                (r for r in securities if r["symbol"] in symbols and r.get("cik")),
+                key=lambda r: (seen.get(r["symbol"], ""), r["symbol"]),
+            )[:10]
+            count, errors = 0, []
+            for row in selected:
+                try:
+                    facts = SEC().fundamentals(row["cik"])
+                    retrieved = datetime.now(timezone.utc)
+                    payload = extract(facts, retrieved)
+                    store.write(
+                        "market_observations",
+                        [
+                            {
+                                "id": f"{row['symbol']}:latest:sec-fundamentals",
+                                "symbol": row["symbol"],
+                                "source": "SEC",
+                                "feed": "sec_fundamentals",
+                                "observed_at": retrieved.isoformat(),
+                                "retrieved_at": retrieved.isoformat(),
+                                "payload": payload,
+                            }
+                        ],
+                    )
+                    count += 1
+                except Exception as exc:
+                    errors.append(
+                        {"symbol": row["symbol"], "error_type": type(exc).__name__}
+                    )
+            payload = {"processed_symbols": count, "provider_errors": errors}
+        elif job == "market_scan":
             from engine.market_scan import market_scan
 
             totals = {"claimed": 0, "covered": 0, "unavailable": 0}
@@ -409,7 +472,9 @@ def main() -> None:
             from engine.research import market_context, news_context
 
             if not args.symbols:
-                candidates = store.pages("features", {"order": "as_of.desc,id.asc"})
+                candidates = store.pages(
+                    "latest_price_features", {"order": "symbol.asc"}
+                )
                 eligible = {
                     row["symbol"]
                     for row in candidates
@@ -420,6 +485,7 @@ def main() -> None:
                     "market_observations",
                     {
                         "select": "symbol,retrieved_at",
+                        "feed": "in.(iex,finnhub_free)",
                         "order": "retrieved_at.desc,id.asc",
                     },
                 )
@@ -427,7 +493,7 @@ def main() -> None:
                 for row in contexts:
                     latest.setdefault(row["symbol"], row["retrieved_at"])
                 symbols = sorted(
-                    (symbol for symbol in symbols if symbol in eligible),
+                    eligible,
                     key=lambda s: (latest.get(s, ""), s),
                 )[:10]
             results = {}

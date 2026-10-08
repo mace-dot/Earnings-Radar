@@ -6,7 +6,8 @@ from typing import Callable
 import httpx
 
 from engine.providers.alpha_vantage import AlphaVantage
-from engine.providers.market import Alpaca, Finnhub
+from engine.providers.market import Finnhub
+from engine.providers.public_market import Nasdaq, Cboe
 from engine.providers.sec import SEC
 from engine.store import ConfigurationError, Store
 
@@ -37,12 +38,13 @@ def main() -> None:
         ),
         ("SEC", lambda: SEC().fundamentals("0000320193")),
         (
-            "Alpaca prices",
-            lambda: Alpaca().bars(
+            "Nasdaq price history",
+            lambda: Nasdaq().bars(
                 ["MU"], (now - timedelta(days=10)).date().isoformat(), start
             ),
         ),
-        ("Alpaca options", lambda: Alpaca().snapshots("MU")),
+        ("Cboe delayed options", lambda: Cboe().snapshots("MU")),
+        ("Finnhub quote", lambda: Finnhub().quote("MU")),
         ("Finnhub", lambda: Finnhub().calendar(start, end)),
         ("Alpha Vantage", lambda: AlphaVantage().calendar(start, end)),
     ]

@@ -44,7 +44,7 @@ def test_missing_feed_is_not_counted_as_covered(monkeypatch):
         def write(self, table, rows):
             assert not rows
 
-    monkeypatch.setattr("engine.market_scan.Alpaca", Provider)
+    monkeypatch.setattr("engine.market_scan.Nasdaq", Provider)
     db = Database()
     result = market_scan(db)
     assert result["covered"] == 0

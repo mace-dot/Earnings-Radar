@@ -21,3 +21,8 @@ MOVE_ENGINE_PLAN is the new technical specification. Prior direct user instructi
 - Lightweight, same-origin quote refresh is an exception to the previous Supabase-only web rule: it requests one IEX trade and caches it under an atomic lease. All heavy analysis remains in the engine.
 - Forum samples reflect self-selected opinions. Missing feeds are unavailable, not zero attention. No public-post popularity score is represented as a calibrated trading edge.
 - Keep the protected preview until the new model/data and production publication requirements are resolved. Do not remove protection to test it.
+
+
+### Public-feed replacement
+
+User requested removing Alpaca after authentication failures. Use existing Finnhub credentials for quotes/news; Nasdaq daily history and Cboe delayed chains require no API key for these endpoints. Respect provider access denials and rate limits. Do not bypass verification challenges or infer redistribution entitlements. SEC filings supply dated fundamental context. Preserve old source records and strategy-version grading. No paid service or order execution enabled.

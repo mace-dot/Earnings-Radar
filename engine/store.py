@@ -26,6 +26,8 @@ TABLES = {
     "forum_posts",
     "market_coverage",
     "market_coverage_summary",
+    "current_line_symbols",
+    "latest_price_features",
 }
 
 

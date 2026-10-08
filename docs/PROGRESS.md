@@ -135,3 +135,14 @@ Added `market_coverage` with source/feed, observation timestamps, compact audita
 The five-minute worker processes a bounded rotating batch. A separate manual bootstrap uses eight leased workers with at most two in parallel. Latest-feature SQL view avoids the prior 1,000-row subset bias in the volatility screen, and the Move screen displays actual coverage totals. Stored latest research packs are not a point-in-time historical model training dataset.
 
 Local engine tests: 61 passed; frontend unit tests: 5 passed; production build/type/lint/format passed. Three connected-database browser flows passed locally. Direct public-site browser tests were blocked by cloud proxy certificate trust; verified HTTPS deployed-page/price requests succeeded. Connected browser acceptance (including price/origin checks) is now part of main-branch GitHub CI using configured runtime secrets; its result must be checked separately. No TLS verification was disabled.
+
+
+## Phase 6: Replace Alpaca dependencies with accessible research feeds
+
+Default master-engine collection now uses Nasdaq public daily history, Cboe delayed option snapshots, Finnhub quotes/company news, and SEC company facts. Alpaca credentials are no longer required in the master workflows or Next.js quote relay. Historical Alpaca observations and older published picks retain their original provenance and grading eligibility.
+
+Verified in the connected cloud environment: 68 engine tests, four browser acceptance tests, and production build. Actual collection stored 867 daily bars across MU/AAPL/AMZN; research and SEC fundamentals completed for those three names. One leased market batch covered 56 identifiers and marked 44 unavailable. This does not establish complete market coverage. Independent scheduled jobs continue after another job fails and report the overall failure honestly.
+
+Added plain-language quarterly revenue growth, matched-period profit margin, cash and current-ratio context with readable filing links. Nasdaq adjustment basis is unspecified; Cboe timestamps identify the delayed snapshot, not individual quote age. Neither source makes historical point-in-time model training or executable option pricing complete. Paper momentum research remains unvalidated, with no probability claims. Market-wide bootstrap, remote CI and production verification must be recorded after their actual results.
+
+Research collection now rotates across all scanned liquid identifiers, not just the earnings calendar. Independent chain-collection timestamps prevent a price-only refresh from authorizing publication of stale option research; regression coverage rejects future timestamps too.

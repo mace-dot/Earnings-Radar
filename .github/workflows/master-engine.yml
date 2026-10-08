@@ -6,7 +6,7 @@ on:
         description: Bounded engine job
         required: true
         type: choice
-        options: [universe, calendar, prices, score, queue, sectors, context, grade, market_scan, doctor]
+        options: [universe, calendar, prices, score, queue, sectors, context, grade, market_scan, fundamentals, doctor]
   schedule:
     - cron: '*/5 * * * *'
     - cron: '0 10,11 * * 1-5'
@@ -34,8 +34,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL || 'https://fepyjsmmgortycprrxjr.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SECRET_KEY }}
-          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY || secrets.FINN_HUB }}
           ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
           SEC_USER_AGENT: 'EarningsRadar mace@udel.edu'

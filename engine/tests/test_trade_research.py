@@ -132,3 +132,20 @@ def test_grading_requires_exact_session_and_no_future_data():
     }
     with pytest.raises(ValueError, match="Future"):
         expiration_outcome(pick, bar, expiry)
+
+
+def test_quote_refresh_cannot_renew_old_option_research():
+    from engine.trade_research import research_is_fresh
+
+    payload = {
+        "research_retrieved_at": (NOW - timedelta(hours=2)).isoformat(),
+        "retrieved_at": NOW.isoformat(),
+    }
+    assert not research_is_fresh(payload, NOW)
+    assert not research_is_fresh({}, NOW)
+    assert not research_is_fresh(
+        {"research_retrieved_at": (NOW + timedelta(minutes=1)).isoformat()}, NOW
+    )
+    assert research_is_fresh(
+        {"research_retrieved_at": (NOW - timedelta(minutes=5)).isoformat()}, NOW
+    )

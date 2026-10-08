@@ -3,10 +3,12 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
+
 from engine.features import price_features
 from engine.move_features import setup_features
 from engine.providers.base import Observation
-from engine.providers.market import Alpaca
+from engine.providers.public_market import Nasdaq
 from engine.store import Store
 
 
@@ -28,7 +30,7 @@ def scan_payload(observations: list[Observation], cutoff: datetime) -> dict[str,
             for o in ordered
         ],
         "classification": "SEC directory identifier; common-share eligibility not verified",
-        "scope": "Completed daily IEX sessions, not consolidated streaming coverage",
+        "scope": "Completed Nasdaq daily sessions, adjustment basis unspecified; not streaming",
         "history_policy": "Latest research snapshot, not a point-in-time backtest dataset",
     }
 
@@ -39,23 +41,29 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         return {"claimed": 0, "covered": 0}
     started = datetime.now(timezone.utc)
     error = None
+    provider = Nasdaq()
     try:
-        bars = Alpaca().bars(
+        bars = provider.bars(
             [r["symbol"] for r in claims],
             (started - timedelta(days=120)).date().isoformat(),
             started.date().isoformat(),
         )
     except Exception as exc:
-        error = type(exc).__name__
+        error = (
+            f"HTTP {exc.response.status_code}"
+            if isinstance(exc, httpx.HTTPStatusError)
+            else type(exc).__name__
+        )
         bars = []
     cutoff = datetime.now(timezone.utc)
     covered = 0
     feature_rows = []
     for row in claims:
         symbol = row["symbol"]
+        symbol_error = error or getattr(provider, "errors", {}).get(symbol)
         observed = [o for o in bars if o.symbol == symbol]
         payload = scan_payload(observed, cutoff)
-        status = "failed" if error else "covered" if observed else "unavailable"
+        status = "failed" if symbol_error else "covered" if observed else "unavailable"
         applied = store.finish_market(
             symbol,
             row["lease_token"],
@@ -65,13 +73,15 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
                 "next_attempt_at": (cutoff + timedelta(hours=24)).isoformat(),
                 "lease_until": None,
                 "lease_token": None,
-                "source": "Alpaca",
-                "feed": "iex_split_adjusted",
+                "source": "Nasdaq",
+                "feed": "nasdaq_daily_adjustment_unspecified",
                 "last_session": (
-                    observed[-1].observed_at.date().isoformat() if observed else None
+                    max(o.observed_at for o in observed).date().isoformat()
+                    if observed
+                    else None
                 ),
                 "sample_size": len(observed),
-                "reason": error
+                "reason": symbol_error
                 or (
                     None
                     if observed
@@ -101,5 +111,5 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         "claimed": len(claims),
         "covered": covered,
         "unavailable": len(claims) - covered,
-        "scope": "SEC identifiers / completed daily IEX bars",
+        "scope": "SEC identifiers / completed Nasdaq daily bars",
     }

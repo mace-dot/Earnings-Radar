@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
       "market_observations",
       {
         symbol: `eq.${symbol}`,
+        feed: "in.(iex,finnhub_free)",
         order: "retrieved_at.desc",
         limit: "1",
       },
@@ -78,41 +79,45 @@ export async function POST(request: NextRequest) {
       const trade = previous[0]?.payload.latestTrade;
       return NextResponse.json(
         trade
-          ? { price: trade.p, as_of: trade.t, feed: "IEX", cached: true }
+          ? {
+              price: trade.p,
+              as_of: trade.t,
+              feed: previous[0]?.source ?? previous[0]?.feed,
+              cached: true,
+            }
           : { error: "Refresh already in progress" },
         { status: trade ? 200 : 202 },
       );
     }
-    const apiKey = process.env.ALPACA_API_KEY,
-      secret = process.env.ALPACA_API_SECRET;
-    if (!apiKey || !secret)
+    const apiKey = process.env.FINNHUB_API_KEY ?? process.env.FINN_HUB;
+    if (!apiKey)
       return NextResponse.json(
-        { error: "Market credential unavailable" },
+        { error: "Finnhub quote credential unavailable" },
         { status: 503 },
       );
     const response = await fetch(
-      `https://data.alpaca.markets/v2/stocks/${encodeURIComponent(symbol)}/trades/latest?feed=iex`,
+      `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}`,
       {
-        headers: { "APCA-API-KEY-ID": apiKey, "APCA-API-SECRET-KEY": secret },
+        headers: { "X-Finnhub-Token": apiKey },
         cache: "no-store",
         signal: AbortSignal.timeout(10000),
       },
     );
     if (!response.ok)
       return NextResponse.json(
-        { error: "Provider temporarily unavailable" },
+        { error: "Quote provider temporarily unavailable" },
         { status: 503 },
       );
     const data = await response.json();
-    const trade = data.trade;
     if (
-      !trade ||
-      typeof trade.p !== "number" ||
-      trade.p <= 0 ||
-      typeof trade.t !== "string" ||
-      !Number.isFinite(Date.parse(trade.t))
+      typeof data.c !== "number" ||
+      !Number.isFinite(data.c) ||
+      data.c <= 0 ||
+      typeof data.t !== "number" ||
+      data.t <= 0
     )
       throw new Error();
+    const trade = { p: data.c, t: new Date(data.t * 1000).toISOString() };
     const now = new Date().toISOString();
     if (Date.parse(trade.t) > Date.now() + 1000) throw new Error();
     const saved = await fetch(
@@ -125,15 +130,16 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify([
           {
-            id: `${symbol}:latest:iex`,
+            id: `${symbol}:latest:finnhub`,
             symbol,
-            source: "Alpaca",
-            feed: "iex",
+            source: "Finnhub",
+            feed: "finnhub_free",
             observed_at: trade.t,
             retrieved_at: now,
             payload: {
+              ...previous[0]?.payload,
               latestTrade: trade,
-              option_estimate: previous[0]?.payload.option_estimate,
+              price_source: "Finnhub",
             },
           },
         ]),
@@ -145,7 +151,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       price: trade.p,
       as_of: trade.t,
-      feed: "IEX",
+      feed: "Finnhub",
       retrieved_at: now,
       cached: false,
     });

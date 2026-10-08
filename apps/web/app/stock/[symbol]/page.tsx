@@ -11,6 +11,7 @@ import {
   type Forum,
 } from "@/components/context";
 import { Board } from "@/components/board";
+import { Fundamentals, type FinancialContext } from "@/components/fundamentals";
 export default async function Stock({
   params,
 }: {
@@ -25,12 +26,21 @@ export default async function Stock({
   });
   if (!companies.length) notFound();
   const company = companies[0];
-  const [bars, events, rawLines, sides, market, news, forums] =
+  const financial = await read<{ payload: FinancialContext }>(
+    "market_observations",
+    {
+      symbol: `eq.${symbol}`,
+      feed: "eq.sec_fundamentals",
+      order: "retrieved_at.desc",
+      limit: "1",
+    },
+  );
+  const [storedBars, events, rawLines, sides, market, news, forums, coverage] =
     await Promise.all([
       read<Bar>("daily_bars", {
         symbol: `eq.${symbol}`,
         order: "session_date.desc",
-        limit: "252",
+        limit: "1000",
       }),
       read<Event>("earnings_events", {
         symbol: `eq.${symbol}`,
@@ -49,6 +59,7 @@ export default async function Stock({
       }),
       read<Market>("market_observations", {
         symbol: `eq.${symbol}`,
+        feed: "in.(iex,finnhub_free)",
         order: "retrieved_at.desc",
         limit: "1",
       }),
@@ -62,7 +73,33 @@ export default async function Stock({
         order: "published_at.desc",
         limit: "30",
       }),
+      read<{
+        payload: {
+          observations: {
+            source: string;
+            feed: string;
+            observed_at: string;
+            available_at: string;
+            values: { c: number; t: string };
+          }[];
+        };
+      }>("market_coverage", {
+        symbol: `eq.${symbol}`,
+        select: "payload",
+        limit: "1",
+      }),
     ]);
+  const preferredBars = storedBars.filter((b) => b.source === "Nasdaq");
+  const bars: Bar[] = storedBars.length
+    ? (preferredBars.length ? preferredBars : storedBars).slice(0, 252)
+    : [...(coverage[0]?.payload.observations ?? [])].reverse().map((o) => ({
+        session_date: o.values.t.slice(0, 10),
+        close: o.values.c,
+        source: o.source,
+        feed: o.feed,
+        as_of: o.observed_at,
+        available_at: o.available_at,
+      }));
   const seen = new Set<string>();
   const lines = rawLines
     .filter((l) => {
@@ -91,6 +128,7 @@ export default async function Stock({
       <p>
         {company.sector} · {company.exchange}
       </p>
+      <Fundamentals context={financial[0]?.payload} sector={company.sector} />
       <div className="two-column">
         <section className="panel">
           <h2>What the price has done</h2>

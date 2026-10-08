@@ -169,10 +169,12 @@ def test_schedule_uses_eastern_dst():
     assert due_jobs(datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)) == [
         "universe",
         "sectors",
+        "fundamentals",
     ]
     assert due_jobs(datetime(2026, 12, 7, 11, 0, tzinfo=timezone.utc)) == [
         "universe",
         "sectors",
+        "fundamentals",
     ]
     assert due_jobs(datetime(2026, 12, 7, 10, 0, tzinfo=timezone.utc)) == []
 

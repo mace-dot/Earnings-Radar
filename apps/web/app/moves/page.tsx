@@ -74,7 +74,7 @@ export default async function Moves() {
                   : "not available"}
               </p>
               <small>
-                Alpaca IEX daily bars · {c.values.sample_size} observations ·
+                Sourced daily bars · {c.values.sample_size} observations ·
                 cutoff {new Date(c.as_of).toLocaleString()}
               </small>
             </article>
@@ -111,7 +111,7 @@ async function Coverage() {
           unavailable in this feed; {c.failed.toLocaleString()} failed attempts.
         </p>
         <small>
-          Automatic rotating batches. Completed daily IEX sessions, not
+          Automatic rotating batches. Completed Nasdaq daily sessions, not
           whole-market streaming. SEC directory membership includes instruments
           whose common-share eligibility is not verified.{" "}
           {c.latest_check &&

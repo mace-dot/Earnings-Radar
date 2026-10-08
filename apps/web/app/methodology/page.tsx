@@ -6,7 +6,7 @@ export default function Methodology() {
       <section className="panel">
         <h2>What is running now</h2>
         <p>
-          The engine collects SEC identifiers and Alpaca daily closing prices,
+          The engine collects SEC identifiers and Nasdaq daily closing prices,
           stores source and collection times, and calculates price changes and
           volatility. Both sides of each setup expose missing inputs. Current
           explanations are rule templates, not independent deep research or a
@@ -15,16 +15,19 @@ export default function Methodology() {
         <h2>What still needs validation</h2>
         <p>
           Historical earnings cases, revisions and executable options quotes are
-          needed before calibrated probabilities or contract picks can be
-          published. The model challenger uses annual walk-forward folds. It
+          needed before validated probabilities or executable trade candidates
+          can be published. Unvalidated paper contract comparisons are kept
+          separate. The model challenger uses annual walk-forward folds. It
           cannot approve itself.
         </p>
         <h2>Data limits</h2>
         <p>
-          IEX is one exchange, so its volume is not total market volume.
-          Indicative options cannot establish an executable price. Provider
-          agreement does not confirm an earnings date; a company announcement is
-          needed.
+          Nasdaq history has an unspecified corporate-action adjustment basis.
+          Cboe options are delayed snapshots, not executable quotes. Finnhub
+          prices retain their original timestamp. Older IEX observations remain
+          labeled with their original source. Indicative options cannot
+          establish an executable price. Provider agreement does not confirm an
+          earnings date; a company announcement is needed.
         </p>
         <h2>Track record rules</h2>
         <p>

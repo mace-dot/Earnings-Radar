@@ -22,7 +22,7 @@ export function ContractDetails({ trade }: { trade: Trade }) {
       </p>
       <p>{trade.exit}</p>
       <small>
-        {c.source} · quote{" "}
+        {c.source} · source timestamp{" "}
         {new Date(c.quote_as_of).toLocaleString("en-US", {
           timeZone: "America/New_York",
         })}{" "}

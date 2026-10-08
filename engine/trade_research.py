@@ -7,7 +7,17 @@ from zoneinfo import ZoneInfo
 
 from engine.options_estimates import parse_contract
 
-VERSION = "paper-momentum-options-v1"
+VERSION = "paper-momentum-options-v2-public-feeds"
+SUPPORTED_VERSIONS = ("paper-momentum-options-v1", VERSION)
+
+
+def research_is_fresh(payload: dict[str, Any], as_of: datetime) -> bool:
+    """Quote refresh cannot renew the age of an independently collected chain."""
+    try:
+        collected = datetime.fromisoformat(payload["research_retrieved_at"])
+        return timedelta(0) <= as_of - collected < timedelta(hours=1)
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def long_options(
@@ -49,6 +59,10 @@ def long_options(
                 "quote_as_of": quoted.isoformat(),
                 "quote_age_seconds": age,
                 "dte": dte,
+                "source": item.get("quote_source", "Retained historical option source"),
+                "timestamp_kind": item.get(
+                    "quote_timestamp_kind", "provider quote timestamp"
+                ),
             }
         )
     result = {}
@@ -74,11 +88,12 @@ def long_options(
             "max_loss": cost,
             "exit": f"Paper evaluation at expiration ({chosen['expiry']}); review sooner if the trend reverses. A real earlier sale needs a new quote.",
             "missing": [
-                "Indicative feed",
+                chosen["source"],
+                chosen["timestamp_kind"],
                 "100-share standard deliverable assumed, not verified",
                 "Model unvalidated",
                 (
-                    "Last-session context, not live entry"
+                    "Delayed snapshot research, not live entry"
                     if chosen["quote_age_seconds"] > 30
                     else "Current executable quote required"
                 ),
@@ -95,7 +110,7 @@ def long_options(
                     else chosen["strike"] - chosen["ask"]
                 ),
                 "spot_reference": spot,
-                "source": "Alpaca indicative",
+                "source": chosen["source"],
                 "executable": False,
             },
         }
@@ -147,10 +162,10 @@ def paper_pick(
             "bullets": side["payload"]["bullets"],
             "countercase": side["payload"]["countercase"],
             "invalidation": "The 20-session trend and 50-session moving-average direction disagree, or new company news changes the case.",
-            "selection_rule": "At least 60 bars, price >= $5, IEX observed average daily dollar volume >= $5m, absolute 20-session return >= 2%, and trend agrees with the 50-session average. Compare 14–60-day contracts with absolute delta 0.35–0.65; prefer 30 days and delta 0.5.",
+            "selection_rule": "At least 60 bars, price >= $5, source-observed average daily dollar volume >= $5m, absolute 20-session return >= 2%, and trend agrees with the 50-session average. Compare 14–60-day contracts with absolute delta 0.35–0.65; prefer 30 days and delta 0.5.",
             "grading_rule": "Expiration-session underlying direction and hypothetical intrinsic payoff minus the recorded ask cost. No actual fill or pre-expiry option P&L is implied.",
             "feature_as_of": feature.get("as_of"),
-            "source": "Alpaca IEX / indicative",
+            "source": contract["source"],
         },
     }
 
@@ -195,7 +210,7 @@ def expiration_outcome(
             "fees_included": False,
             "deliverable_verified": False,
             "exit_observation_id": bar["id"],
-            "note": "Paper ask reference and assumed 100-share deliverable; not executed P&L. IEX closing price is a partial-market proxy, not official settlement.",
+            "note": "Paper ask reference and assumed 100-share deliverable; not executed P&L. The source closing price is a proxy, not official option settlement; adjustments require separate verification.",
         }
     )
     return outcome
