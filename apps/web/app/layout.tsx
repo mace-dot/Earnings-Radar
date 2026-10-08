@@ -24,6 +24,7 @@ export default function Layout({
             <Link href="/moves">Move screen</Link>
             <Link href="/picks">Picks</Link>
             <Link href="/track-record">Track record</Link>
+            <Link href="/validation">Forecast testing</Link>
             <Link href="/learn">Learn</Link>
             <Link href="/methodology">How it works</Link>
           </nav>

@@ -141,3 +141,21 @@ test("automatic research and weekly earnings have separate board views", async (
     page.getByText("Automatically researched setups", { exact: true }),
   ).toBeVisible();
 });
+
+test("forecast testing shows real progress without an approved probability", async ({
+  page,
+}) => {
+  await page.goto("/validation");
+  await expect(
+    page.getByRole("heading", { name: "Confidence has to earn its place." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Frozen research cases" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Untouched test cases" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/No model probability is approved for trading yet/),
+  ).toBeVisible();
+});

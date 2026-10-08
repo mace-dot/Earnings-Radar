@@ -52,8 +52,8 @@ export default async function Moves() {
         can persist; this is not a calibrated forecast of a large move.
       </p>
       <div className="notice">
-        Predictive Move Meter is not active. Historical earnings data and
-        out-of-sample validation are still required.
+        Forecast probabilities require completed validation.{" "}
+        <Link href="/validation">Follow the testing progress →</Link>
       </div>
       <Coverage />
       {error ? (
@@ -113,7 +113,7 @@ async function Coverage() {
           unavailable in this feed; {c.failed.toLocaleString()} failed attempts.
         </p>
         <small>
-          Automatic rotating batches. Completed Nasdaq daily sessions, not
+          Automatic rotating batches. Completed sourced daily sessions, not
           whole-market streaming. SEC directory membership includes instruments
           whose common-share eligibility is not verified.{" "}
           {c.latest_check &&

@@ -6,7 +6,7 @@ export default function Methodology() {
       <section className="panel">
         <h2>What is running now</h2>
         <p>
-          The engine collects SEC identifiers and Nasdaq daily closing prices,
+          The engine collects SEC identifiers and sourced daily closing prices,
           stores source and collection times, and calculates price changes and
           volatility. Both sides of each setup expose missing inputs. Current
           explanations are rule templates, not independent deep research or a
@@ -17,12 +17,16 @@ export default function Methodology() {
           Historical earnings cases, revisions and executable options quotes are
           needed before validated probabilities or executable trade candidates
           can be published. Unvalidated paper contract comparisons are kept
-          separate. The model challenger uses annual walk-forward folds. It
-          cannot approve itself.
+          separate. Prospective stock-move testing freezes inputs and evaluates
+          five later exchange sessions. Training, calibration and test periods
+          stay separate, with overlapping outcomes excluded. The model cannot
+          approve itself.
         </p>
         <h2>Data limits</h2>
         <p>
-          Nasdaq history has an unspecified corporate-action adjustment basis.
+          Nasdaq history has an unspecified corporate-action adjustment basis. A
+          Massive account can supply split-adjusted daily aggregates when its
+          entitlement allows; split checks are required for model evaluation.
           Cboe options are delayed snapshots, not executable quotes. Finnhub
           prices retain their original timestamp. Older IEX observations remain
           labeled with their original source. Indicative options cannot

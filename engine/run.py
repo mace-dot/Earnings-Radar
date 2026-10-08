@@ -14,6 +14,7 @@ from engine.lines import build_lines
 from engine.providers.base import Observation
 from engine.providers.market import Finnhub
 from engine.providers.public_market import Nasdaq
+from engine.providers.daily_history import history_provider
 from engine.providers.alpha_vantage import AlphaVantage
 from engine.providers.sec import SEC
 from engine.store import Store
@@ -21,6 +22,11 @@ from engine.store import Store
 
 def safe_diagnostic(exc: Exception) -> str:
     """Only allow known diagnostic forms; never expose arbitrary provider bodies."""
+    if str(exc) in {
+        "MASSIVE_API_KEY missing; add a historical-data key securely",
+        "MASSIVE_API_KEY missing; a historical-data account is required",
+    }:
+        return str(exc)
     match = re.fullmatch(r"(Database|Queue) operation failed \((\d{3})\)", str(exc))
     if match:
         return f"{match[1]} HTTP {match[2]}"
@@ -96,7 +102,7 @@ def calendar(store: Store, now: datetime) -> dict[str, Any]:
 
 def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
     observations = []
-    provider = Nasdaq()
+    provider = history_provider(store, Nasdaq)
     for offset in range(0, len(symbols), 100):
         observations.extend(
             provider.bars(
@@ -131,7 +137,7 @@ def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
     return {
         "bars": len(rows),
         "symbols": symbols,
-        "feed": "nasdaq_daily_adjustment_unspecified",
+        "feed": observations[0].feed if observations else None,
         "provider_errors": provider.errors,
     }
 
@@ -178,7 +184,11 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         feature_rows, line_rows, side_rows, pick_rows = [], [], [], []
         for symbol in batch:
             matching = [row for row in all_bars if row["symbol"] == symbol]
-            preferred = [row for row in matching if row["source"] == "Nasdaq"]
+            preferred = [row for row in matching if row["source"] == "Massive"]
+            if len(preferred) < 60:
+                prior = [row for row in matching if row["source"] == "Nasdaq"]
+                if len(prior) > len(preferred):
+                    preferred = prior
             bars = (preferred or matching)[-500:]
             observations = [
                 Observation(
@@ -449,6 +459,8 @@ def main() -> None:
             "history_backfill",
             "grade",
             "market_scan",
+            "history_sync",
+            "validate",
             "fundamentals",
         ],
     )
@@ -513,6 +525,14 @@ def main() -> None:
                 key=lambda r: (seen.get(r["symbol"], ""), r["symbol"]),
             )[:10]
             payload = collect(store, [row["symbol"] for row in selected])
+        elif job == "validate":
+            from engine.validation import run as validate
+
+            payload = validate(store, now)
+        elif job == "history_sync":
+            from engine.providers.daily_history import synchronize
+
+            payload = synchronize(store, now)
         elif job == "market_scan":
             from engine.market_scan import market_scan
 

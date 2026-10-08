@@ -7,7 +7,8 @@ import httpx
 
 from engine.providers.alpha_vantage import AlphaVantage
 from engine.providers.market import Finnhub
-from engine.providers.public_market import Nasdaq, Cboe
+from engine.providers.public_market import Cboe
+from engine.providers.daily_history import history_provider
 from engine.providers.sec import SEC
 from engine.store import ConfigurationError, Store
 
@@ -45,9 +46,9 @@ def main() -> None:
         ),
         ("SEC", lambda: SEC().fundamentals("0000320193")),
         (
-            "Nasdaq price history",
+            "Daily price history",
             lambda: require_observations(
-                lambda: Nasdaq().bars(
+                lambda: history_provider(Store()).bars(
                     ["MU"], (now - timedelta(days=10)).date().isoformat(), start
                 )
             ),

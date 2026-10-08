@@ -10,6 +10,9 @@ TABLES = {
     "securities",
     "earnings_events",
     "daily_bars",
+    "market_history_days",
+    "validation_cases",
+    "validation_outcomes",
     "option_snapshots",
     "estimate_revisions",
     "news_items",
@@ -117,6 +120,7 @@ class Store:
             "radar_request_score",
             "radar_claim_scores",
             "radar_claim_market",
+            "radar_history_bars",
         }:
             raise ValueError("Unknown RPC")
         response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)

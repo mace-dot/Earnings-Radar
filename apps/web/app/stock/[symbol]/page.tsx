@@ -90,7 +90,11 @@ export default async function Stock({
         limit: "1",
       }),
     ]);
-  const preferredBars = storedBars.filter((b) => b.source === "Nasdaq");
+  const adjustedBars = storedBars.filter((b) => b.source === "Massive");
+  const preferredBars =
+    adjustedBars.length >= 60
+      ? adjustedBars
+      : storedBars.filter((b) => b.source === "Nasdaq");
   const bars: Bar[] = storedBars.length
     ? (preferredBars.length ? preferredBars : storedBars).slice(0, 252)
     : [...(coverage[0]?.payload.observations ?? [])].reverse().map((o) => ({

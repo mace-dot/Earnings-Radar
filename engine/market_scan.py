@@ -9,6 +9,7 @@ from engine.features import price_features
 from engine.move_features import setup_features
 from engine.providers.base import Observation
 from engine.providers.public_market import Nasdaq
+from engine.providers.daily_history import history_provider
 from engine.store import Store
 
 
@@ -30,7 +31,7 @@ def scan_payload(observations: list[Observation], cutoff: datetime) -> dict[str,
             for o in ordered
         ],
         "classification": "SEC directory identifier; common-share eligibility not verified",
-        "scope": "Completed Nasdaq daily sessions, adjustment basis unspecified; not streaming",
+        "scope": "Completed sourced daily sessions; adjustment basis recorded per observation, not streaming",
         "history_policy": "Latest research snapshot, not a point-in-time backtest dataset",
     }
 
@@ -41,7 +42,7 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         return {"claimed": 0, "covered": 0}
     started = datetime.now(timezone.utc)
     error = None
-    provider = Nasdaq()
+    provider = history_provider(store, Nasdaq)
     try:
         bars = provider.bars(
             [r["symbol"] for r in claims],
@@ -75,11 +76,14 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
             {
                 "state": status,
                 "checked_at": cutoff.isoformat(),
-                "next_attempt_at": (cutoff + timedelta(hours=24)).isoformat(),
+                "next_attempt_at": (
+                    cutoff
+                    + timedelta(hours=24 if len(observed) >= 60 or not observed else 1)
+                ).isoformat(),
                 "lease_until": None,
                 "lease_token": None,
-                "source": "Nasdaq",
-                "feed": "nasdaq_daily_adjustment_unspecified",
+                "source": observed[0].source if observed else None,
+                "feed": observed[0].feed if observed else None,
                 "last_session": (
                     max(o.observed_at for o in observed).date().isoformat()
                     if observed
@@ -117,5 +121,5 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         "covered": covered,
         "unavailable": len(claims) - covered - failed_count,
         "failed": failed_count,
-        "scope": "SEC identifiers / completed Nasdaq daily bars",
+        "scope": "SEC identifiers / completed sourced daily bars",
     }

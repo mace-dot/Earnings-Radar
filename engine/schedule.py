@@ -17,7 +17,8 @@ SLOTS = {
     (15, 30): ["context", "score"],
     (17, 30): ["prices", "score"],
     (17, 45): ["grade"],
-    (20, 0): ["score"],
+    (17, 50): ["validate"],
+    (20, 0): ["score", "validate"],
 }
 
 
@@ -62,6 +63,7 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
             "score",
             "grade",
             "fundamentals",
+            "validate",
         )
         if job in due and (job not in completed or completed[job] < due[job])
     ]
@@ -71,6 +73,17 @@ def history_scan_due(now: datetime, runs: list[dict]) -> bool:
     """Back off a failed source rather than consume every scheduled run."""
     return not any(
         row["job"] == "market_scan"
+        and row["status"] == "failed"
+        and timedelta(0)
+        <= now - datetime.fromisoformat(row["as_of"].replace("Z", "+00:00"))
+        < timedelta(hours=1)
+        for row in runs
+    )
+
+
+def history_sync_due(now: datetime, runs: list[dict]) -> bool:
+    return not any(
+        row["job"] == "history_sync"
         and row["status"] == "failed"
         and timedelta(0)
         <= now - datetime.fromisoformat(row["as_of"].replace("Z", "+00:00"))
@@ -96,6 +109,12 @@ def main() -> None:
         )
         jobs = [
             "queue",
+            *(
+                ["history_sync"]
+                if (os.getenv("MASSIVE_API_KEY") or os.getenv("POLYGON_API_KEY"))
+                and history_sync_due(now, runs)
+                else []
+            ),
             *(["market_scan"] if history_scan_due(now, runs) else []),
             *pending_jobs(now, runs),
         ]

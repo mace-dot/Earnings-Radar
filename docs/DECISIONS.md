@@ -36,3 +36,9 @@ Use measured setup priority for research allocation only: quietness, past price 
 ### Coverage-cache recovery
 
 When fresh history collection fails, reuse only genuinely acquired coverage observations available at the scoring cutoff. Preserve original source and timing, use immutable insertion for existing observations, and keep the source failure visible. Normalize only exact whole-share volumes; do not round fractional values. Display all market timestamps in America/New_York with an explicit Eastern label.
+
+### Supported historical replacement and earned forward validation
+
+Standard Nasdaq collection fails outside the managed cloud environment; Yahoo remains rate-limited and Stooq unavailable in the tested GitHub context. Use an account-authorized Massive/Polygon grouped daily archive when a usable credential exists. Verify actual free-plan entitlement before claiming the feed works. Source denials remain observable; neither credentials nor source challenges are bypassed. Download once per session and share within the worker rather than repeating full-market histories per ticker.
+
+Price-magnitude model evaluation must use frozen prospective inputs, five later exchange sessions and verified split-free windows. Current historical cache acquisition times cannot be backdated to manufacture point-in-time training cases. Store real calibration and uncertainty when enough cases exist; do not publish a number merely because tests or a model training call ran successfully. The new five-session target is distinct from event-specific earnings moves and option-contract profit.
