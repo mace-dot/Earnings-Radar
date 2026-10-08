@@ -16,8 +16,9 @@ export default async function Moves() {
   let rows: Features[] = [];
   let error = false;
   try {
-    rows = await read<Features>("features", {
-      order: "as_of.desc",
+    rows = await read<Features>("latest_price_features", {
+      order: "values->vol_compression_ratio.asc.nullslast",
+      "values->>vol_compression_ratio": "lt.0.8",
       select: "id,symbol,as_of,values",
       limit: "1000",
     });
@@ -52,6 +53,7 @@ export default async function Moves() {
         Predictive Move Meter is not active. Historical earnings data and
         out-of-sample validation are still required.
       </div>
+      <Coverage />
       {error ? (
         <p>Screen data temporarily unavailable.</p>
       ) : (
@@ -84,4 +86,40 @@ export default async function Moves() {
       )}
     </>
   );
+}
+
+async function Coverage() {
+  try {
+    const [c] = await read<{
+      total_identifiers: number;
+      covered: number;
+      recently_checked: number;
+      unavailable: number;
+      failed: number;
+      waiting: number;
+      latest_check: string | null;
+    }>("market_coverage_summary");
+    if (!c) return null;
+    return (
+      <section className="panel">
+        <h2>Market coverage</h2>
+        <p>
+          {c.covered.toLocaleString()} of {c.total_identifiers.toLocaleString()}{" "}
+          directory identifiers have price observations.{" "}
+          {c.recently_checked.toLocaleString()} checked within 36 hours;{" "}
+          {c.waiting.toLocaleString()} waiting; {c.unavailable.toLocaleString()}{" "}
+          unavailable in this feed; {c.failed.toLocaleString()} failed attempts.
+        </p>
+        <small>
+          Automatic rotating batches. Completed daily IEX sessions, not
+          whole-market streaming. SEC directory membership includes instruments
+          whose common-share eligibility is not verified.{" "}
+          {c.latest_check &&
+            `Last check ${new Date(c.latest_check).toLocaleString("en-US", { timeZone: "America/New_York" })} Eastern.`}
+        </small>
+      </section>
+    );
+  } catch {
+    return <p>Coverage totals are temporarily unavailable.</p>;
+  }
 }

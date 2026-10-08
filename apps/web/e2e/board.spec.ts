@@ -17,7 +17,9 @@ test("search, both-sided case, price history and lineup", async ({ page }) => {
     page.getByRole("heading", { name: "What could go wrong" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Shares with stop" }),
+    page.getByRole("heading", {
+      name: /^(Shares with stop|Long call research)$/,
+    }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Add to research lineup" }).click();
   await expect(
@@ -75,6 +77,7 @@ test("Micron has distinct sides, source context and a refreshed observed price",
 
 test("live-price relay rejects other origins and returns a real observed trade", async ({
   request,
+  baseURL,
 }) => {
   const denied = await request.post("/api/market", {
     headers: { Origin: "https://untrusted.example" },
@@ -82,7 +85,7 @@ test("live-price relay rejects other origins and returns a real observed trade",
   });
   expect(denied.status()).toBe(403);
   const response = await request.post("/api/market", {
-    headers: { Origin: "http://127.0.0.1:3100" },
+    headers: { Origin: new URL(baseURL ?? "http://127.0.0.1:3100").origin },
     data: { symbol: "MU" },
   });
   expect(response.status()).toBe(200);
@@ -90,4 +93,29 @@ test("live-price relay rejects other origins and returns a real observed trade",
   expect(quote.price).toBeGreaterThan(0);
   expect(quote.feed).toBe("IEX");
   expect(Number.isFinite(Date.parse(quote.as_of))).toBe(true);
+});
+
+test("published option research has concrete economics and a pending public record", async ({
+  page,
+}) => {
+  await page.goto("/picks");
+  const pick = page.locator("article").first();
+  await expect(
+    pick.getByText("Unvalidated paper research · no probability"),
+  ).toBeVisible();
+  await expect(pick.getByText(/One assumed standard contract:/)).toBeVisible();
+  await expect(pick.getByText(/Expiration breakeven:/)).toBeVisible();
+  await expect(
+    pick.getByRole("heading", { name: "What could go wrong" }),
+  ).toBeVisible();
+  const symbol = await pick.getByRole("link").first().textContent();
+  await page.goto("/track-record");
+  const row = page
+    .locator(".row")
+    .filter({ hasText: symbol ?? "" })
+    .first();
+  await expect(row).toBeVisible();
+  await expect(row.getByText("Pending evaluation")).toBeVisible();
+  await row.getByText("Evaluation details").click();
+  await expect(row.getByText(/Review horizon:/)).toBeVisible();
 });

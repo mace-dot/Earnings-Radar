@@ -24,6 +24,8 @@ TABLES = {
     "score_queue",
     "market_observations",
     "forum_posts",
+    "market_coverage",
+    "market_coverage_summary",
 }
 
 
@@ -109,12 +111,28 @@ class Store:
         return response.json() if response.content else []
 
     def rpc(self, name: str, payload: dict[str, Any]) -> Any:
-        if name not in {"radar_request_score", "radar_claim_scores"}:
+        if name not in {
+            "radar_request_score",
+            "radar_claim_scores",
+            "radar_claim_market",
+        }:
             raise ValueError("Unknown RPC")
         response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)
         if not response.is_success:
             raise RuntimeError(f"Queue operation failed ({response.status_code})")
         return response.json()
+
+    def finish_market(
+        self, symbol: str, lease_token: str, payload: dict[str, Any]
+    ) -> bool:
+        rows = self._request(
+            "market_coverage",
+            method="PATCH",
+            params={"symbol": f"eq.{symbol}", "lease_token": f"eq.{lease_token}"},
+            json=payload,
+            headers={"Prefer": "return=representation"},
+        )
+        return bool(rows)
 
     def finish_score(self, symbol: str, reason: str | None = None) -> None:
         from datetime import datetime, timezone

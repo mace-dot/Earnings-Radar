@@ -357,10 +357,14 @@ def main() -> None:
             "sectors",
             "history_backfill",
             "grade",
+            "market_scan",
         ],
     )
     parser.add_argument("--symbols", default="")
+    parser.add_argument("--batches", type=int, default=1)
     args = parser.parse_args()
+    if not 1 <= args.batches <= 100:
+        parser.error("--batches must be between 1 and 100")
     now = datetime.now(timezone.utc)
     if args.job == "doctor":
         from engine.doctor import main as doctor
@@ -375,7 +379,18 @@ def main() -> None:
     if not symbols and job in {"prices", "score", "context", "sectors"}:
         symbols = calendar_symbols(store, now)
     try:
-        if job == "grade":
+        if job == "market_scan":
+            from engine.market_scan import market_scan
+
+            totals = {"claimed": 0, "covered": 0, "unavailable": 0}
+            for _ in range(args.batches):
+                result = market_scan(store)
+                for key in totals:
+                    totals[key] += result.get(key, 0)
+                if not result["claimed"]:
+                    break
+            payload = totals
+        elif job == "grade":
             payload = grade(store, now)
         elif job == "history_backfill":
             from engine.providers.history import alpha_earnings
