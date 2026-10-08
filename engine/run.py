@@ -55,8 +55,14 @@ def universe(store: Store) -> dict[str, Any]:
             for key in ("sector", "industry", "sector_etf"):
                 if key in prior:
                     row[key] = prior[key]
-    for offset in range(0, len(rows), 400):
-        store.write("securities", rows[offset : offset + 400], "symbol")
+    # PostgREST bulk upserts require identical keys. Keep optional enrichment
+    # absent for unclassified names rather than overwriting it with null.
+    groups: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(tuple(sorted(row)), []).append(row)
+    for group in groups.values():
+        for offset in range(0, len(group), 400):
+            store.write("securities", group[offset : offset + 400], "symbol")
     return {
         "identifiers": len(rows),
         "asset_classification": "Not yet verified as common shares",

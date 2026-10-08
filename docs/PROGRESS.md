@@ -191,3 +191,8 @@ Automatic context and company-requested research can reuse original collected co
 Actual recovery restored 4,897 observations for 59 covered companies whose newer feature rows had empty history. Regeneration produced 354 lines, with zero companies missing stored price history and zero remaining covered empty feature rows. Source download failures remain recorded rather than hidden. Display timestamps and market dates now use Eastern time consistently across server and browser views.
 
 Verification: 85 engine tests pass, including future-data rejection and exact volume normalization. Six frontend unit tests, lint/format, production build and five connected browser flows passed locally before the final Python normalization fix. Phase 9 remote CI passed and its Vercel deployment was READY. Phase 10 deployment and remote CI require independent post-push verification. Reliable new daily history downloads from GitHub and calibrated predictive models remain unresolved.
+
+
+### Phase 10 follow-up: Directory refresh repair
+
+The scheduled universe refresh failed with PostgREST PGRST102 (all object keys must match). Existing listing/sector enrichment made row shapes differ. Refresh now groups equal-shaped rows into bounded upserts, preserving optional enrichment rather than inserting nulls. A regression test exercises enriched and newly discovered companies together. Actual connected refresh completed with 10,435 identifiers; this new directory count does not imply the newly added identifier has already been scanned. All 86 engine tests pass. Phase 10 dd79b43 Vercel deployment is READY.
