@@ -8,13 +8,15 @@ import httpx
 from engine.providers.alpha_vantage import AlphaVantage
 from engine.providers.market import Alpaca, Finnhub
 from engine.providers.sec import SEC
-from engine.store import Store
+from engine.store import ConfigurationError, Store
 
 
 def check(name: str, operation: Callable[[], object]) -> dict[str, str]:
     try:
         operation()
         return {"provider": name, "status": "OK"}
+    except ConfigurationError as exc:
+        return {"provider": name, "status": "FAIL", "reason": str(exc)}
     except httpx.HTTPStatusError as exc:
         return {
             "provider": name,
@@ -44,9 +46,14 @@ def main() -> None:
         ("Finnhub", lambda: Finnhub().calendar(start, end)),
         ("Alpha Vantage", lambda: AlphaVantage().calendar(start, end)),
     ]
+    failures = []
     for name, operation in checks:
         result = check(name, operation)
         print(f"{name}: {result['status']} {result.get('reason', '')}")
+        if result["status"] == "FAIL" and name != "Alpha Vantage":
+            failures.append(name)
+    if failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

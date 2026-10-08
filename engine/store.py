@@ -27,15 +27,40 @@ TABLES = {
 }
 
 
+class ConfigurationError(RuntimeError):
+    """Actionable configuration failure whose message contains no secret values."""
+
+
+def database_configuration() -> tuple[str, str]:
+    url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    key = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        or os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+    )
+    if not url:
+        raise ConfigurationError("SUPABASE_URL is missing in this worker environment")
+    if not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", url):
+        raise ConfigurationError(
+            "SUPABASE_URL must be the project API URL, not a dashboard or database URL"
+        )
+    if not key:
+        raise ConfigurationError(
+            "SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SECRET_KEY) is missing in this worker environment"
+        )
+    if key.startswith("sbp_"):
+        raise ConfigurationError(
+            "A Supabase personal access token cannot authenticate database requests; use a server API key"
+        )
+    if key.startswith("sb_publishable_"):
+        raise ConfigurationError(
+            "Use a Supabase server secret key, not a publishable key"
+        )
+    return url, key
+
+
 class Store:
     def __init__(self) -> None:
-        self.url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-        self.key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
-        if (
-            not re.fullmatch(r"https://[a-z0-9-]+\.supabase\.co", self.url)
-            or not self.key
-        ):
-            raise RuntimeError("Supabase server configuration missing")
+        self.url, self.key = database_configuration()
         headers = {"apikey": self.key, "Content-Type": "application/json"}
         if not self.key.startswith("sb_secret_"):
             headers["Authorization"] = f"Bearer {self.key}"
