@@ -86,7 +86,13 @@ class Nasdaq:
 
         # Small bounded concurrency; provider denials propagate instead of being bypassed.
         with ThreadPoolExecutor(max_workers=2) as pool:
-            return [bar for group in pool.map(collect, symbols) for bar in group]
+            output = []
+            # Submit only two requests at a time: an outage must not leave 100
+            # queued requests consuming the full GitHub job timeout.
+            for offset in range(0, len(symbols), 2):
+                for group in pool.map(collect, symbols[offset : offset + 2]):
+                    output.extend(group)
+            return output
 
 
 class Cboe:

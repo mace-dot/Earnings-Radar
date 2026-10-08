@@ -221,3 +221,10 @@ The existing `web` deployment is preserved until the replacement passes the rele
 The board now uses the connected upcoming calendar instead of a fixed seed list. Company pages can request automated research and refresh the latest observed IEX trade. `/moves` screens observed volatility compression; it does not publish calibrated move probabilities. News and community opinions retain source and timing, with bounded sampling disclosed.
 
 Run `python -m engine.run doctor`, then `calendar`, `sectors`, `prices`, `score`, `queue`, or `context --symbols MU`. The missing Alpha Vantage free key blocks historical earnings backfill. Review [Move Engine progress](docs/PROGRESS.md) for actual acceptance results and the [new technical plan](docs/MOVE_ENGINE_PLAN.md).
+
+
+### Current Next.js market-data connection
+
+The master engine and Vercel app use `SUPABASE_URL`, server-only `SUPABASE_SERVICE_ROLE_KEY`, and `FINNHUB_API_KEY` (existing `FINN_HUB` binding also accepted). Nasdaq public daily bars and Cboe delayed options currently require no API key. SEC requires a identifying User-Agent. Alpaca credentials are only relevant to legacy adapters; they are no longer required by the master workflows.
+
+The `/moves` coverage panel reports real scan counts and failed/unavailable identifiers. Daily history is not whole-market streaming; Cboe snapshots are delayed research references with unknown individual quote age. `/picks` shows unvalidated paper research and `/track-record` grades its expiration reference outcomes when a matching closing observation becomes available. Neither page promises calibrated probabilities or actual trading fills. See `docs/PROGRESS.md` for verified release evidence and remaining model work.

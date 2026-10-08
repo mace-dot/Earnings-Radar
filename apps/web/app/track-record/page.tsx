@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { read } from "@/lib/db";
 import type { Pick, Outcome } from "@/lib/types";
 export default async function Record() {

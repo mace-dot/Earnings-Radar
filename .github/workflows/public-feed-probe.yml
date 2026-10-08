@@ -1,0 +1,31 @@
+name: Public history connection probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Read public daily history endpoints
+        shell: python
+        run: |
+          import json
+          import urllib.request
+          urls = {
+              "Yahoo": "https://query1.finance.yahoo.com/v8/finance/chart/MU?range=6mo&interval=1d",
+              "Stooq": "https://stooq.com/q/d/l/?s=mu.us&i=d",
+          }
+          for name, url in urls.items():
+              try:
+                  with urllib.request.urlopen(url, timeout=20) as response:
+                      body = response.read()
+                      if name == "Yahoo":
+                          data = json.loads(body)["chart"]["result"][0]
+                          print(name, response.status, "daily timestamps", len(data["timestamp"]))
+                      else:
+                          text = body.decode()
+                          print(name, response.status, "csv_header", text.startswith("Date,Open,High,Low,Close,Volume"), "lines", len(text.splitlines()))
+              except Exception as exc:
+                  print(name, type(exc).__name__, getattr(exc, "code", None))

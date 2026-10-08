@@ -536,7 +536,15 @@ def main() -> None:
                     len(value["news"].get("errors", [])) for value in results.values()
                 ),
             }
-            score(store, datetime.now(timezone.utc), symbols)
+            # Newly discovered names need stored, sourced bars before their lines are scored.
+            researched = list(results)
+            if researched:
+                payload["price_collection"] = prices(
+                    store, datetime.now(timezone.utc), researched
+                )
+                payload["scoring"] = score(
+                    store, datetime.now(timezone.utc), researched
+                )
         else:
             payload = (
                 universe(store)

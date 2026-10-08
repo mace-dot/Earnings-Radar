@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { read } from "@/lib/db";
 import type { Pick } from "@/lib/types";
 import Link from "next/link";

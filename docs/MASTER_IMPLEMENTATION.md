@@ -77,3 +77,8 @@ To switch production **after acceptance**: Vercel → earnings-radar → Setting
 Current Move Engine preview: https://earnings-radar-bxh2rkh87-mace16.vercel.app/stock/MU . Sign in with the existing Vercel account. The older preview URL does not contain the new UI code.
 
 Worker doctor logs confirm missing GitHub Actions credentials; set the five required names in repository Settings → Secrets and variables → Actions, then run Master research engine with `doctor`, followed by `queue`. The five-minute schedule is present, but credential availability must be confirmed by per-provider OK results, not workflow success alone.
+
+
+## Current provider/deployment override
+
+Production is now `apps/web` on Vercel. Default master providers are Nasdaq daily history, Cboe delayed option snapshots, Finnhub quotes/news/calendar and SEC filings. Required runtime credentials are Supabase server credentials and Finnhub; Alpaca is no longer required. Optional Alpha Vantage historical earnings still requires a free credential. Old Alpaca guidance above describes earlier releases only. Verified coverage counts and unfinished model validation are recorded in PROGRESS.md.

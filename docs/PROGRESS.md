@@ -146,3 +146,10 @@ Verified in the connected cloud environment: 68 engine tests, four browser accep
 Added plain-language quarterly revenue growth, matched-period profit margin, cash and current-ratio context with readable filing links. Nasdaq adjustment basis is unspecified; Cboe timestamps identify the delayed snapshot, not individual quote age. Neither source makes historical point-in-time model training or executable option pricing complete. Paper momentum research remains unvalidated, with no probability claims. Market-wide bootstrap, remote CI and production verification must be recorded after their actual results.
 
 Research collection now rotates across all scanned liquid identifiers, not just the earnings calendar. Independent chain-collection timestamps prevent a price-only refresh from authorizing publication of stale option research; regression coverage rejects future timestamps too.
+
+
+### Remote release verification and follow-up
+
+Commit 52da952 deployed READY. Production stock/picks/track-record/moves pages returned HTTP 200; quote relay returned a sourced Finnhub observation and rejected a foreign origin with HTTP 403. GitHub doctor confirmed Supabase, SEC, Cboe and Finnhub; Nasdaq timed out from GitHub despite working in this cloud environment. Bootstrap was cancelled to avoid wasting request/runtime budgets. Remote CI passed three browser flows but exposed static generation of the picks page without build-time database credentials. These database-backed pages now render at request time, with cached data reads retained. Scan request submission is bounded to two in-flight requests so an outage cannot queue 100 requests before surfacing a failure.
+
+Actual AMD/NVDA context collection completed with 578 Nasdaq bars, 12 scored lines, and no provider errors. Newly researched symbols now collect stored source bars before scoring. A public connection probe checks standard Yahoo chart and Stooq CSV endpoints from GitHub; it does not bypass access challenges or disguise the client.
