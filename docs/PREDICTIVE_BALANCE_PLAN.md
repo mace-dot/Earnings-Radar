@@ -10,7 +10,7 @@ Earlier plans collect prices, filings, news, and a Stocktwits sample, then score
 
 The research question is now explicit:
 
-**Which liquid common stocks are set up for a large price move, and does the case get stronger or weaker when retail discussion, authorized news, verified filings, and observed trading disagree?**
+**Which liquid common stocks are set up for a large price move, and does the case get stronger or weaker when retail discussion, authorized news, verified filings, observed trading, and — once licensed — options-market expectations disagree?**
 
 Institutional research processes are the model for *how* the platform works: separate data desks, point-in-time features, a pre-registered target, simple baselines, walk-forward tests, and a written record of losses. The platform does not copy a hedge-fund book, and it does not claim one. The difference in *what* it looks for is deliberate. Many institutional factor books target small, slow return differences. This platform looks for large moves and for trading that is unusually heavy or unusually quiet relative to that stock’s own history. Retail discussion is included because a crowd can be early, late, crowded, or wrong, and that disagreement with filings and price is itself a testable feature.
 
@@ -43,9 +43,9 @@ Operating constraints that this plan does not relax:
 - Missing numbers stay missing.
 - Keep publication time, first observed availability, and the decision cutoff as three different timestamps.
 
-## 2. Four desks, kept separate
+## 2. Five desks, kept separate
 
-Every research case is built from four desks. A desk can be present, partial, or missing. Desks are not averaged into one mood score.
+Every research case is built from five desks. A desk can be present, partial, or missing. Desks are not averaged into one mood score.
 
 | Desk | What it is allowed to say | What it must not say | Existing code |
 |---|---|---|---|
@@ -53,8 +53,11 @@ Every research case is built from four desks. A desk can be present, partial, or
 | News | Authorized headlines, excerpts, publisher, and time | Paywalled article text, or a tone label treated as a probability | Finnhub company news path |
 | Retail | Permitted posts and comments, author-declared tags, and measured activity versus that source’s own baseline | “The crowd is right,” or interest inferred from a wider API pull | `engine/providers/community.py`, `forum_posts` |
 | Market | Returns, realized volatility, volume, range, and compression or expansion versus the same symbol’s history | A liquidity sweep, unless the data actually shows one | `engine/features.py`, `engine/move_features.py`, Massive archive |
+| Expectations | What a licensed options and earnings feed says the market is pricing: announced report dates, implied volatility, and option-trade activity | A forecast owned by Earnings Radar, or a liquidity sweep | Not connected. Market Chameleon is the intended source and is `LICENSE_REQUIRED` |
 
-**Balance rule.** A case is called balanced only when the market desk is present and at least one of filings, news, or retail is present, and the write-up states where they agree and where they do not. Retail alone can prioritize a symbol for collection. It cannot publish a research case. Filings alone can describe the business. They cannot claim a move is coming.
+Market Chameleon is the expectations desk, not a retail community. Its job is the institutional counterweight to the crowd: what option prices and announced events imply, set next to what forums are saying and what filings report. Until a license is purchased and a file delivery succeeds, the desk stays missing. The card says the source is not connected. It does not estimate an implied move to fill the gap.
+
+**Balance rule.** A case is called balanced only when the market desk is present and at least one of filings, news, retail, or expectations is present, and the write-up states where they agree and where they do not. Retail alone can prioritize a symbol for collection. It cannot publish a research case. Expectations alone cannot publish one either. Filings alone can describe the business. They cannot claim a move is coming.
 
 **Disagreement is a feature, not a defect.** These are the first cross-desk patterns to compute. Each one is a hypothesis until the validation program in §8 says otherwise.
 
@@ -66,6 +69,8 @@ Every research case is built from four desks. A desk can be present, partial, or
 | Split crowd, vol changing | Bullish and bearish posts both have weight, and realized volatility is compressing or expanding | Disagreement score and `vol_compression_ratio` | One author cluster dominates, or volatility history is short |
 | Quiet crowd, coiled price | Little eligible discussion and volatility is compressed versus this stock’s own baseline | Explicit low-coverage state, not a fake zero, plus compression | Discussion was not collected, so “quiet” is unknown |
 | Headlines and crowd diverge | Authorized news tone and retail tags point opposite ways | Both sources present inside the same window | One source failed and was stored as empty |
+| Crowd excited, options quiet | Retail is leaning up while the licensed implied-volatility or event snapshot does not show a large priced move | Retail sample rules pass, and a Market Chameleon field contracted for that symbol is present | Expectations desk is unlicensed or the field was not in the feed |
+| Crowd quiet, options busy | Eligible discussion is scarce while licensed option-trade activity or implied volatility is elevated versus that feed’s own history for the symbol | Explicit low-coverage retail state, plus the licensed options field | Discussion was not collected, so “quiet” is unknown |
 
 Popularity or disagreement alone does not mean a move is imminent.
 
@@ -95,6 +100,8 @@ The user-facing phrase before validation is “research case for a large move,�
 | 2 | Liquidity sweep | Trades that lift resting bids or offers, stop-runs, or depth leaving the book | Blocked. Needs licensed tick or depth data. Do not label Level 0 as a sweep in the interface, the model, or a commit message. |
 
 A liquidity sweep in institutional language is an order-flow event. Daily volume cannot show it. The honest free-data analogue is: “this stock traded much more, and over a much wider range, than it usually does.” That can be studied as a predictor of later large moves. It is not evidence that stops were run.
+
+Market Chameleon’s paid option-trades feed, if later licensed, is still not a sweep. The public feed description is end-of-day option prints with a bid/ask snapshot and greeks. That can measure unusual options activity. It does not show stock orders clearing a book.
 
 ### 3.3 Provisional windows
 
@@ -140,6 +147,12 @@ Blocks stay identifiable inside the frozen vector. A later ablation must be able
 - A coverage flag: collected, empty, failed, rate-limited, approval required, license required, credential required.
 - One-hot or explicit mask for “not collected.” Never impute the neutral midpoint.
 
+**Expectations block, only after a Market Chameleon license**
+
+- Fields limited to the contract. The public catalog confirms an earnings feed of announced events, and an option-trades feed with bid/ask snapshots, delta, vega, implied volatility, and that day’s implied-volatility change. Do not add historical move averages, unusual-activity scores, or a Web API response shape that the signed feed does not actually contain.
+- Store the file delivery time as availability. A later download of older rows is not point-in-time history unless the file itself carries the original publication time.
+- Missing because the license was not bought stays a coverage flag. It is not a null implied move treated as “no expected move.”
+
 **Regime block**
 
 - One market-wide flag from a sourced index or volatility series if that series is already permitted. If it is not in the database, leave the block absent. Do not download a new paid index.
@@ -148,10 +161,10 @@ Blocks stay identifiable inside the frozen vector. A later ablation must be able
 
 | Step | Model | Job | Ship when |
 |---|---|---|---|
-| P0 | No model | Show the four desks, the disagreement patterns, and the data gaps | As soon as the features exist. This is the interface default now. |
+| P0 | No model | Show the five desks, the disagreement patterns, and the data gaps, including Market Chameleon as not connected | As soon as the features exist. This is the interface default now. |
 | P1 | Transparent rules | Fire a pattern from §2 only when every required input is non-null | Unit tests pass. The card says the rule is unvalidated. |
 | P2 | Price-only logistic | Existing forward test. Predict `large_move_5d` from the market block | Already scaffolded. Stays a challenger until §8 passes. |
-| P3 | Ablation logistics | Same label, same splits: price only; price plus filings; price plus news; price plus retail; all available blocks | Retail or news may be added only if that block improves out-of-sample Brier score against the price-only model on the untouched test, with overlapping outcome windows purged. |
+| P3 | Ablation logistics | Same label, same splits: price only; price plus filings; price plus news; price plus retail; price plus expectations; all available blocks | Another block may be added only if it improves out-of-sample Brier score against the price-only model on the untouched test, with overlapping outcome windows purged. The expectations block waits until licensed rows exist. |
 | P4 | Direction model | Separate label, same freeze rules | Reported beside magnitude. A failure is a result. It does not get hidden. |
 | P5 | Tree challenger | Only after P3 has a real test set | Promote only if it beats P3 on Brier and on a pre-registered utility that counts false large-move calls, not on in-sample accuracy. |
 
@@ -169,9 +182,10 @@ Expected value per dollar, option structures, and position size stay out of this
 - Volatility-only: the current five price keys.
 - Momentum-only: `return_20` sign, as a directional baseline, not as a large-move model.
 - Retail-only: retail block alone. This report exists to show that crowd data by itself is not the product. If it loses to the base rate, say so on the validation page.
+- Expectations-only, once licensed: Market Chameleon block alone, same honesty rule.
 - Full model: only the blocks that were actually non-missing for that row. List the dropped blocks per case.
 
-If the full model does not beat the price-only model, retail and news stay on the card as evidence and drop out of the score. The card must say that.
+If the full model does not beat the price-only model, retail, news, and expectations stay on the card as evidence and drop out of the score. The card must say that.
 
 ## 5. Phase 1 — Finish the pipeline that prediction depends on
 
@@ -219,6 +233,34 @@ Confirm whether any authorized community-content feed exists for this use. Do no
 ### Seeking Alpha
 
 Use an authorized API, a licensed feed, or a currently permitted official RSS feed. Verify the endpoint and the rights before storing text. Allowed analysis fields are only those the terms grant: headline, excerpt, rating, or body. Do not fetch paywalled bodies. Store editorial and analyst items on the news desk, not the retail desk.
+
+### Market Chameleon
+
+Checked 2026-10-08 against Market Chameleon’s public developer, data-feed, and subscription pages. A direct fetch of those pages from this environment returned HTTP 403, so the notes below follow the pages as publicly indexed that day. Re-read the live pages before writing an adapter. Do not treat this section as a successful connection.
+
+Official position on the developer page: MarketChameleon.com is display-only for a person using a browser. A Web/REST API is not available. Automated harvesting of the website is against the terms and is enforced. The stated exceptions are limited, metered CSV downloads for Premium subscribers, and bulk data feeds sold separately.
+
+Public catalog prices seen that day, month-to-month:
+
+| Product | Listed price | What the catalog says it contains | Plan status |
+|---|---|---|---|
+| Premium website | $99 | Site access, plus metered CSV downloads | Paid. Display use. Not a collection API. |
+| Earnings Data Feed, internal use | $500 | Announced corporate earnings events | Paid. `LICENSE_REQUIRED` |
+| Option Trades Data Feed, internal use | $500 | End-of-day OPRA option prints, bid/ask snapshot at the trade, delta, vega, implied volatility, and the day’s implied-volatility change | Paid. `LICENSE_REQUIRED` |
+| Dividend feeds, internal use | $500 each | Announced, forecast, or guidance dividends | Out of scope unless a later plan needs them |
+| Subscriber-specified feed | Quote only | Can combine site data, including a Web API if they build one | Do not invent that API. Email `data@marketchameleon.com` only after payment is authorized |
+
+Feeds are licensed as personal use, internal use, or external redistribution. Internal use does not authorize publishing the numbers on the public Earnings Radar site. A public card needs the redistribution license, or it can say only that the feed is connected without reprinting licensed figures. Confirm which one the invoice covers.
+
+Implementation rules if Mason explicitly authorizes a subscription:
+
+- Collect through the documented file method for that feed (manual download, FTP, or WebDAV, and the vendor’s own automation notes). Do not scrape HTML. Do not bypass the 403.
+- Normalize only columns present in the delivered file. Keep the symbol, event or contract identifier, the vendor’s event time, and the time the file was first retrieved.
+- Put announced earnings on the expectations desk. Put option prints and implied volatility on that same desk. Do not file them as retail sentiment.
+- Respect the feed’s refresh schedule. The option-trades description says publication is shortly after the close, so it is not an intraday sweep detector.
+- Store credentials only in GitHub Actions or the worker environment.
+
+Until that authorization, ship a capability record of `LICENSE_REQUIRED` and a card line: “Options-market expectations from Market Chameleon are not connected. They require a paid license.” No fixture numbers in production.
 
 ### Other retail communities
 
@@ -306,7 +348,7 @@ The card shows:
 - “Building baseline” or “Small sample” otherwise.
 - Activity versus the measured baseline.
 - How many posts and authors, and the clock times of the window.
-- Which sources were read, which were blocked, and which were not configured.
+- Which sources were read, which were blocked, and which were not configured. Market Chameleon appears as “not connected — paid license required,” not as a neutral options reading.
 - Whether price and volume agree with that story, in a separate sentence.
 - Why it matters, as one of the §2 patterns.
 - What would make it wrong.
@@ -353,7 +395,7 @@ After the checks above, commit by phase, update `docs/PROGRESS.md` and `docs/DEC
 3. Blocked because it needs a license or a paid feed.
 4. Validation still open, including any model that ran but was not promoted.
 
-Do not write that Reddit, TradingView, and Seeking Alpha are integrated. Do not write that liquidity sweeps are detected. Do not write that the platform matches a hedge fund’s results.
+Do not write that Reddit, TradingView, Seeking Alpha, or Market Chameleon are integrated. Do not write that liquidity sweeps or unusual options activity are detected from daily stock bars. Do not write that the platform matches a hedge fund’s results.
 
 ## 14. Implementation order
 
@@ -361,7 +403,7 @@ The next session should execute in this order, and stop with an honest progress 
 
 1. Phase 1 pipeline repair and the unavailable-identifier review.
 2. Stocktwits extension on the shared provider interface, with tests.
-3. Reddit, TradingView, and Seeking Alpha access checks. Implement a live client only for a source whose official terms allow it at no charge. Otherwise commit the blocked capability and the documentation row.
+3. Reddit, TradingView, Seeking Alpha, and Market Chameleon access checks. Implement a live client only for a source whose official terms allow it at no charge. Market Chameleon stays `LICENSE_REQUIRED` unless a paid internal-use or redistribution subscription is explicitly authorized. Otherwise commit the blocked capability and the documentation row.
 4. Migrations, sentiment math, and cross-desk flags.
 5. Wire flags into discovery and the company card.
 6. Extend forward validation with masked retail and news blocks, still unpublished.

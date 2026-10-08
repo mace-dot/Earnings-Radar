@@ -243,7 +243,7 @@ Whole-market archive completed: 1,035,343 observations, 83 sessions (June 10–O
 Specification written in `docs/PREDICTIVE_BALANCE_PLAN.md`. It makes large-move prediction the research target and keeps retail discussion, news, filings, and price behavior as separate desks. No new collection, model, or interface shipped with the document.
 
 - [ ] Phase 1: Repair scan HTTP 500, bounded transient retries, honest workflow status, run skipped research, classify 3,254 unavailable identifiers.
-- [ ] Phase 2: Shared provider interface. Extend Stocktwits. Reddit, TradingView, and Seeking Alpha only if official no-cost access is verified; otherwise record the blocked capability.
+- [ ] Phase 2: Shared provider interface. Extend Stocktwits. Reddit, TradingView, and Seeking Alpha only if official no-cost access is verified; otherwise record the blocked capability. Market Chameleon is the expectations desk and stays `LICENSE_REQUIRED` until a paid feed is explicitly authorized.
 - [ ] Phase 3: Provenance migrations, collection runs, versioned sentiment snapshots, deletion rules.
 - [ ] Phase 4: Deterministic sentiment math joined to market, filing, and news features at the same cutoff.
 - [ ] Phase 5: Cross-desk research flags with evidence, counterevidence, and invalidation. No probability.
@@ -251,4 +251,4 @@ Specification written in `docs/PREDICTIVE_BALANCE_PLAN.md`. It makes large-move 
 - [ ] Phase 7: Crowd and evidence cards in plain language, including small-sample and missing-source states.
 - [ ] Phase 8: Prospective ablation against the price-only baseline. No self-approval. No invented forum history.
 
-Not started, and not claimed: liquidity-sweep detection, calibrated large-move probabilities, Reddit or Seeking Alpha collection, TradingView community text.
+Not started, and not claimed: liquidity-sweep detection, calibrated large-move probabilities, Reddit or Seeking Alpha collection, TradingView community text, Market Chameleon earnings or option-trade collection.

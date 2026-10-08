@@ -17,6 +17,7 @@ Official documentation checked on 2026-10-06:
 | WSJ / Dow Jones | Registry entry | Authorized feed/API required; no paywall bypass. |
 | EarningsHub | Registry entry | Exact site/API identity requested; integration not guessed. |
 | Seeking Alpha | Registry entry | Authorized/licensed content feed required; contributor opinion separate from primary evidence. |
+| Market Chameleon | Expectations desk in `docs/PREDICTIVE_BALANCE_PLAN.md`. Not connected. | Display-only site. Developer page: no public Web/REST API; scraping prohibited. Premium site access listed at $99/month. Earnings and option-trades feeds listed at $500/month for internal use. Public display needs an external-redistribution license. Direct page fetch on 2026-10-08 returned HTTP 403; re-read the live terms before any adapter. |
 | Yahoo Finance | Registry entry | Authorized API/terms not verified. Unofficial endpoints/cookie workarounds not used. |
 | Google Finance | Registry entry | No supported authorized API verified. No scraper. |
 | Truth Social | Registry entry | Direct API eligibility, pricing, credentials and rights unverified. Original statements cannot be inferred from a secondary headline. |
