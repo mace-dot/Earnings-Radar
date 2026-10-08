@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { read } from "@/lib/db";
 import type { Security, Bar, Event, Line, Side } from "@/lib/types";
 import { PriceChart } from "@/components/chart";
+import { selectHistory } from "@/lib/history";
 import { RequestScore } from "@/components/request-score";
 import {
   Context,
@@ -90,21 +91,17 @@ export default async function Stock({
         limit: "1",
       }),
     ]);
-  const adjustedBars = storedBars.filter((b) => b.source === "Massive");
-  const preferredBars =
-    adjustedBars.length >= 60
-      ? adjustedBars
-      : storedBars.filter((b) => b.source === "Nasdaq");
-  const bars: Bar[] = storedBars.length
-    ? (preferredBars.length ? preferredBars : storedBars).slice(0, 252)
-    : [...(coverage[0]?.payload.observations ?? [])].reverse().map((o) => ({
-        session_date: o.values.t.slice(0, 10),
-        close: o.values.c,
-        source: o.source,
-        feed: o.feed,
-        as_of: o.observed_at,
-        available_at: o.available_at,
-      }));
+  const coverageBars: Bar[] = (coverage[0]?.payload.observations ?? []).map(
+    (o) => ({
+      session_date: o.values.t.slice(0, 10),
+      close: o.values.c,
+      source: o.source,
+      feed: o.feed,
+      as_of: o.observed_at,
+      available_at: o.available_at,
+    }),
+  );
+  const bars = selectHistory(storedBars, coverageBars);
   const seen = new Set<string>();
   const lines = rawLines
     .filter((l) => {
