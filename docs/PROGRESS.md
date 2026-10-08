@@ -162,3 +162,12 @@ Bounded company research now collects comparable SEC fundamentals alongside quot
 A Nasdaq history outage no longer discards successfully collected company research: the job records a partial result and scores available stored history, with original source dates. Symbol-specific Nasdaq 400/404 unavailability is distinct from a provider-wide failure.
 
 69 engine tests passed. Actual AMD/NVDA context completed with two SEC summaries, 578 Nasdaq bars, 12 lines, and no provider errors. GitHub CI for 4f376a5 passed, including all four connected browser flows. Public source probes from GitHub: Yahoo HTTP 429, Stooq HTTP 404; Finnhub historical candles returned HTTP 403 in this cloud environment. Do not bypass these limits. Nasdaq remains usable in this cloud instance; durable GitHub history collection is still blocked. Coverage collection continues here while the session runs. No background-chat availability or complete streaming coverage is promised.
+
+
+## Phase 8: Exchange identity and bounded failure handling
+
+Added sourced Nasdaq Trader exchange-directory metadata without removing searchable SEC identifiers. Actual matching classified 7,133 identifiers and conservatively recognized 5,262 common-stock names; ETFs, warrants, preferred securities, depositary securities, test issues and ambiguous names remain distinct. This name-based classification is not prospectus or option-deliverable verification.
+
+Paper strategy v3 requires a common-stock classification collected within seven days. Older v1/v2 picks keep their original records and grading support. Default deep research rotates among liquid common-stock candidates; other companies remain searchable. The stock page explains classification in plain language instead of showing raw internal asset labels. Migration 013 applied to the connected database.
+
+74 engine tests passed; local production build/lint and four browser tests passed. Actual AAPL/MU v3 paper research was published with copied filing context and classification provenance. Nasdaq per-symbol transport/format failures preserve healthy names in the same batch. Adjacent transport failures halt queued requests; a completely failed batch stops bootstrap, and scheduled market scanning backs off for one hour. Provider-wide 429/403 is still raised, without access bypass. Empty history no longer passes as successful price collection. Remote verification for 90bf8e4: GitHub CI success and Vercel READY.

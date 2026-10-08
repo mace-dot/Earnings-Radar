@@ -88,3 +88,32 @@ def test_malformed_numbers_are_not_prices():
     assert number("$1,234.56") == 1234.56
     assert number("--") is None
     assert number("NaN") is None
+
+
+def test_one_symbol_timeout_does_not_discard_other_symbols():
+    provider = Nasdaq()
+
+    def response(request):
+        if "/TIMEOUT/" in request.url.path:
+            raise httpx.ReadTimeout("fixture timeout", request=request)
+        return httpx.Response(200, json={"data": {"tradesTable": {"rows": []}}})
+
+    provider.client = httpx.Client(transport=httpx.MockTransport(response))
+    assert provider.bars(["TIMEOUT", "EMPTY"], "2020-01-01", "2030-01-01") == []
+    assert provider.errors == {"TIMEOUT": "ReadTimeout"}
+
+
+def test_transport_outage_does_not_submit_the_entire_symbol_queue():
+    provider = Nasdaq()
+    requested = []
+
+    def response(request):
+        requested.append(request.url.path)
+        raise httpx.ReadTimeout("fixture timeout", request=request)
+
+    provider.client = httpx.Client(transport=httpx.MockTransport(response))
+    assert (
+        provider.bars(["ONE", "TWO", "THREE", "FOUR"], "2020-01-01", "2030-01-01") == []
+    )
+    assert len(requested) == 2
+    assert "halted" in provider.errors["THREE"]

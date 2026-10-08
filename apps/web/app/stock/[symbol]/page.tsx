@@ -179,8 +179,13 @@ export default async function Stock({
         </p>
         <p className="muted">
           Verified directory as of {new Date(company.as_of).toLocaleString()}.
-          Asset type: {company.asset_type}. Business fundamentals, estimates and
-          executable contract quotes still need collection.
+          {company.asset_type === "common_stock"
+            ? " Exchange directory identifies this as common shares."
+            : " Common-share classification is not confirmed; company research remains available."}
+          {company.listing_metadata?.retrieved_at &&
+            ` Listing checked ${new Date(company.listing_metadata.retrieved_at).toLocaleString("en-US", { timeZone: "America/New_York" })} Eastern.`}{" "}
+          Current executable option quotes are separate from the delayed
+          research snapshots.
         </p>
       </section>
     </>

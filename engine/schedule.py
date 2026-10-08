@@ -3,13 +3,13 @@
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from engine.store import Store
 
 SLOTS = {
-    (6, 0): ["universe", "sectors", "fundamentals"],
+    (6, 0): ["universe", "listings", "sectors", "fundamentals"],
     (6, 15): ["calendar"],
     (18, 0): ["calendar"],
     (9, 45): ["context", "score"],
@@ -54,6 +54,7 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
         job
         for job in (
             "universe",
+            "listings",
             "sectors",
             "calendar",
             "prices",
@@ -64,6 +65,18 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
         )
         if job in due and (job not in completed or completed[job] < due[job])
     ]
+
+
+def history_scan_due(now: datetime, runs: list[dict]) -> bool:
+    """Back off a failed source rather than consume every scheduled run."""
+    return not any(
+        row["job"] == "market_scan"
+        and row["status"] == "failed"
+        and timedelta(0)
+        <= now - datetime.fromisoformat(row["as_of"].replace("Z", "+00:00"))
+        < timedelta(hours=1)
+        for row in runs
+    )
 
 
 def main() -> None:
@@ -81,7 +94,11 @@ def main() -> None:
                 "limit": "1000",
             },
         )
-        jobs = ["queue", "market_scan", *pending_jobs(now, runs)]
+        jobs = [
+            "queue",
+            *(["market_scan"] if history_scan_due(now, runs) else []),
+            *pending_jobs(now, runs),
+        ]
     if not jobs:
         print("No job due at this Eastern time")
     failed = []

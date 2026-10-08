@@ -29,20 +29,30 @@ class Nasdaq:
 
     def bars(self, symbols: list[str], start: str, end: str) -> list[Observation]:
         def collect(symbol: str) -> list[Observation]:
-            r = self.client.get(
-                f"https://api.nasdaq.com/api/quote/{symbol}/historical",
-                params={
-                    "assetclass": "stocks",
-                    "fromdate": start,
-                    "todate": end,
-                    "limit": 5000,
-                },
-            )
+            try:
+                r = self.client.get(
+                    f"https://api.nasdaq.com/api/quote/{symbol}/historical",
+                    params={
+                        "assetclass": "stocks",
+                        "fromdate": start,
+                        "todate": end,
+                        "limit": 5000,
+                    },
+                )
+            except httpx.RequestError as exc:
+                self.errors[symbol] = type(exc).__name__
+                return []
             if r.status_code in {400, 404}:
                 self.errors[symbol] = f"Symbol unavailable (HTTP {r.status_code})"
                 return []
             r.raise_for_status()
-            data = r.json().get("data") or {}
+            try:
+                data = r.json().get("data") or {}
+            except ValueError:
+                self.errors[symbol] = (
+                    "Non-JSON provider response; no challenge bypass attempted"
+                )
+                return []
             if int(data.get("totalRecords") or 0) > 5000:
                 raise RuntimeError("Historical pagination exceeds capacity")
             rows = (data.get("tradesTable") or {}).get("rows") or []
@@ -90,8 +100,23 @@ class Nasdaq:
             # Submit only two requests at a time: an outage must not leave 100
             # queued requests consuming the full GitHub job timeout.
             for offset in range(0, len(symbols), 2):
-                for group in pool.map(collect, symbols[offset : offset + 2]):
+                batch = symbols[offset : offset + 2]
+                for group in pool.map(collect, batch):
                     output.extend(group)
+                transport_errors = {
+                    "ReadTimeout",
+                    "ConnectTimeout",
+                    "ConnectError",
+                    "ReadError",
+                }
+                if batch and all(
+                    self.errors.get(symbol) in transport_errors for symbol in batch
+                ):
+                    for symbol in symbols[offset + 2 :]:
+                        self.errors[symbol] = (
+                            "Transport batch halted after adjacent failures"
+                        )
+                    break
             return output
 
 

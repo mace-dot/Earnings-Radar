@@ -2,6 +2,7 @@
 
 import argparse
 import hashlib
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -18,6 +19,19 @@ from engine.providers.sec import SEC
 from engine.store import Store
 
 
+def safe_diagnostic(exc: Exception) -> str:
+    """Only allow known diagnostic forms; never expose arbitrary provider bodies."""
+    match = re.fullmatch(r"(Database|Queue) operation failed \((\d{3})\)", str(exc))
+    if match:
+        return f"{match[1]} HTTP {match[2]}"
+    if re.fullmatch(
+        r"Market scan provider failed \((HTTP \d{3}|[A-Za-z]+)\); attempts recorded",
+        str(exc),
+    ):
+        return str(exc)
+    return "See per-source observation status"
+
+
 def digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()[:24]
 
@@ -30,6 +44,9 @@ def universe(store: Store) -> dict[str, Any]:
     }
     for row in rows:
         prior = previous.get(row["symbol"], {})
+        if prior.get("listing_metadata"):
+            row["listing_metadata"] = prior["listing_metadata"]
+            row["asset_type"] = prior["asset_type"]
         if prior.get("sector") not in {
             None,
             "Unclassified",
@@ -82,6 +99,8 @@ def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                 now.date().isoformat(),
             )
         )
+    if symbols and not observations:
+        raise RuntimeError("No usable daily history returned; cached bars preserved")
     rows = []
     for observation in observations:
         bar = observation.values
@@ -107,6 +126,7 @@ def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
         "bars": len(rows),
         "symbols": symbols,
         "feed": "nasdaq_daily_adjustment_unspecified",
+        "provider_errors": provider.errors,
     }
 
 
@@ -136,6 +156,10 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                 "feed": "in.(iex,finnhub_free)",
                 "order": "retrieved_at.desc,id.asc",
             },
+        )
+        identities = store.pages(
+            "securities",
+            {"symbol": membership, "select": "symbol,asset_type,listing_metadata"},
         )
         financials = store.pages(
             "market_observations",
@@ -170,6 +194,9 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
                 **price_features(observations, now),
                 **setup_features(observations, now),
             }
+            identity = next((row for row in identities if row["symbol"] == symbol), {})
+            feature["asset_type"] = identity.get("asset_type", "unverified")
+            feature["listing_metadata"] = identity.get("listing_metadata", {})
             if not bars:
                 missing_prices += 1
             feature_rows.append(
@@ -383,6 +410,7 @@ def main() -> None:
             "context",
             "doctor",
             "sectors",
+            "listings",
             "history_backfill",
             "grade",
             "market_scan",
@@ -408,7 +436,26 @@ def main() -> None:
     if not symbols and job in {"prices", "score", "context", "sectors"}:
         symbols = calendar_symbols(store, now)
     try:
-        if job == "fundamentals":
+        if job == "listings":
+            from engine.providers.listings import directory
+
+            identities = directory()
+            securities = store.pages("securities", {"order": "symbol.asc"})
+            updated = [
+                {**row, **identities[row["symbol"]]}
+                for row in securities
+                if row["symbol"] in identities
+            ]
+            for offset in range(0, len(updated), 300):
+                store.write("securities", updated[offset : offset + 300], "symbol")
+            payload = {
+                "classified_identifiers": len(updated),
+                "common_stock": sum(
+                    row["asset_type"] == "common_stock" for row in updated
+                ),
+                "rule": "exchange-directory-name-v1",
+            }
+        elif job == "fundamentals":
             from engine.fundamentals import collect
 
             symbols = symbols or calendar_symbols(store, now)
@@ -434,14 +481,22 @@ def main() -> None:
         elif job == "market_scan":
             from engine.market_scan import market_scan
 
-            totals = {"claimed": 0, "covered": 0, "unavailable": 0}
+            totals = {"claimed": 0, "covered": 0, "unavailable": 0, "failed": 0}
             for _ in range(args.batches):
                 result = market_scan(store)
                 for key in totals:
                     totals[key] += result.get(key, 0)
+                if result["claimed"] and result.get("failed") == result["claimed"]:
+                    raise RuntimeError(
+                        "All history requests failed for this batch; collection stopped"
+                    )
                 if not result["claimed"]:
                     break
             payload = totals
+            if totals["failed"]:
+                payload["provider_errors"] = [
+                    {"provider": "Nasdaq history", "failed_symbols": totals["failed"]}
+                ]
         elif job == "grade":
             payload = grade(store, now)
         elif job == "history_backfill":
@@ -470,6 +525,15 @@ def main() -> None:
                     if (row["values"].get("last_close") or 0) >= 5
                     and (row["values"].get("adv_20") or 0) >= 5000000
                 }
+                listed = store.pages(
+                    "securities",
+                    {
+                        "asset_type": "eq.common_stock",
+                        "select": "symbol",
+                        "order": "symbol.asc",
+                    },
+                )
+                eligible.intersection_update(row["symbol"] for row in listed)
                 contexts = store.pages(
                     "market_observations",
                     {
@@ -574,11 +638,16 @@ def main() -> None:
                     "job": job,
                     "as_of": now.isoformat(),
                     "status": "failed",
-                    "payload": {"error_type": type(exc).__name__},
+                    "payload": {
+                        "error_type": type(exc).__name__,
+                        "diagnostic": safe_diagnostic(exc),
+                    },
                 }
             ],
         )
-        print(f"{job}: failed ({type(exc).__name__}); cached data preserved")
+        print(
+            f"{job}: failed ({type(exc).__name__}; {safe_diagnostic(exc)}); cached data preserved"
+        )
         raise SystemExit(1) from None
     store.write(
         "engine_runs",

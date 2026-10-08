@@ -19,6 +19,11 @@ def quote(kind="C", bid=2, ask=2.2, delta=0.5):
 
 def make_pick(side="BULL"):
     feature = {
+        "asset_type": "common_stock",
+        "listing_metadata": {
+            "retrieved_at": NOW.isoformat(),
+            "source": "fixture-exchange",
+        },
         "sample_size": 100,
         "last_close": 100,
         "atr_14": 2,
@@ -149,3 +154,12 @@ def test_quote_refresh_cannot_renew_old_option_research():
     assert research_is_fresh(
         {"research_retrieved_at": (NOW - timedelta(minutes=5)).isoformat()}, NOW
     )
+
+
+def test_unknown_security_type_and_stale_listing_prevent_paper_publication():
+    _, feature, line, side = make_pick()
+    feature["asset_type"] = "warrant"
+    assert paper_pick(line, side, feature, [], NOW) is None
+    feature["asset_type"] = "common_stock"
+    feature["listing_metadata"]["retrieved_at"] = (NOW - timedelta(days=8)).isoformat()
+    assert paper_pick(line, side, feature, [], NOW) is None

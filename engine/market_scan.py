@@ -57,13 +57,18 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         bars = []
     cutoff = datetime.now(timezone.utc)
     covered = 0
+    failed_count = 0
     feature_rows = []
     for row in claims:
         symbol = row["symbol"]
         symbol_error = error or getattr(provider, "errors", {}).get(symbol)
         observed = [o for o in bars if o.symbol == symbol]
         payload = scan_payload(observed, cutoff)
-        status = "failed" if error else "covered" if observed else "unavailable"
+        failed_symbol = symbol_error and not symbol_error.startswith(
+            "Symbol unavailable"
+        )
+        status = "failed" if failed_symbol else "covered" if observed else "unavailable"
+        failed_count += int(status == "failed")
         applied = store.finish_market(
             symbol,
             row["lease_token"],
@@ -110,6 +115,7 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
     return {
         "claimed": len(claims),
         "covered": covered,
-        "unavailable": len(claims) - covered,
+        "unavailable": len(claims) - covered - failed_count,
+        "failed": failed_count,
         "scope": "SEC identifiers / completed Nasdaq daily bars",
     }

@@ -28,6 +28,13 @@ def check(name: str, operation: Callable[[], object]) -> dict[str, str]:
         return {"provider": name, "status": "FAIL", "reason": type(exc).__name__}
 
 
+def require_observations(operation: Callable[[], object]) -> object:
+    result = operation()
+    if not result:
+        raise RuntimeError("Provider returned no usable observations")
+    return result
+
+
 def main() -> None:
     now = datetime.now(timezone.utc)
     start, end = now.date().isoformat(), (now + timedelta(days=7)).date().isoformat()
@@ -39,8 +46,10 @@ def main() -> None:
         ("SEC", lambda: SEC().fundamentals("0000320193")),
         (
             "Nasdaq price history",
-            lambda: Nasdaq().bars(
-                ["MU"], (now - timedelta(days=10)).date().isoformat(), start
+            lambda: require_observations(
+                lambda: Nasdaq().bars(
+                    ["MU"], (now - timedelta(days=10)).date().isoformat(), start
+                )
             ),
         ),
         ("Cboe delayed options", lambda: Cboe().snapshots("MU")),

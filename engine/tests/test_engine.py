@@ -168,11 +168,13 @@ def test_schedule_uses_eastern_dst():
 
     assert due_jobs(datetime(2026, 10, 7, 10, 0, tzinfo=timezone.utc)) == [
         "universe",
+        "listings",
         "sectors",
         "fundamentals",
     ]
     assert due_jobs(datetime(2026, 12, 7, 11, 0, tzinfo=timezone.utc)) == [
         "universe",
+        "listings",
         "sectors",
         "fundamentals",
     ]
@@ -193,3 +195,12 @@ def test_direction_grading_waits_for_horizon_and_does_not_claim_option_pnl():
     result = grade_direction(pick, 90, NOW + timedelta(days=2), "fixture")
     assert result["payload"]["return_fraction"] == pytest.approx(0.1)
     assert result["payload"]["contract_pnl"] is None
+
+
+def test_failed_history_source_backs_off_without_blocking_other_jobs():
+    from engine.schedule import history_scan_due
+
+    runs = [{"job": "market_scan", "status": "failed", "as_of": NOW.isoformat()}]
+    assert not history_scan_due(NOW + timedelta(minutes=30), runs)
+    assert history_scan_due(NOW + timedelta(hours=1), runs)
+    assert history_scan_due(NOW, [])

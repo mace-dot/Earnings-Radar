@@ -6,6 +6,7 @@ export type Security = {
   source: string;
   as_of: string;
   asset_type: string;
+  listing_metadata?: { retrieved_at?: string; security_name?: string };
 };
 export type Bar = {
   session_date: string;
