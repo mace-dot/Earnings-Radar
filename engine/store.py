@@ -11,6 +11,7 @@ TABLES = {
     "earnings_events",
     "daily_bars",
     "market_history_days",
+    "market_history_indexed_sessions",
     "validation_cases",
     "validation_outcomes",
     "option_snapshots",
@@ -122,6 +123,7 @@ class Store:
             "radar_claim_market",
             "radar_history_bars",
             "radar_history_packs",
+            "radar_index_history",
         }:
             raise ValueError("Unknown RPC")
         if name == "radar_history_bars":

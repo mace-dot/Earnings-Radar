@@ -71,9 +71,25 @@ class Massive:
             for bar in pack["results"]
         ]
         observed = {r["symbol"] for r in rows}
-        for symbol in symbols:
-            if symbol not in observed:
-                self.errors[symbol] = "Adjusted history archive not yet available"
+        missing = set(symbols) - observed
+        if missing:
+            now = datetime.now(timezone.utc)
+            expected = [s for s in recent_sessions(now) if s < now.date().isoformat()][
+                -61:
+            ]
+            indexed = {
+                row["id"].removeprefix(f"{FEED}:")
+                for row in self.store.read(
+                    "market_history_indexed_sessions", {"select": "id"}
+                )
+            }
+            complete = len(expected) == 61 and set(expected).issubset(indexed)
+            for symbol in missing:
+                self.errors[symbol] = (
+                    "Symbol unavailable in completed adjusted archive; instrument identity unresolved"
+                    if complete
+                    else "Adjusted history archive not yet available"
+                )
         return [
             Observation(
                 row["symbol"],
@@ -97,7 +113,11 @@ class Massive:
 
 
 def history_provider(store: Any, fallback: Any = Nasdaq) -> Any:
-    return Massive(store) if massive_key() else fallback()
+    return (
+        Massive(store)
+        if massive_key() or os.getenv("HISTORY_PROVIDER") == "massive"
+        else fallback()
+    )
 
 
 def collect_day(store: Any, session: str, now: datetime) -> int:
@@ -157,6 +177,7 @@ def collect_day(store: Any, session: str, now: datetime) -> int:
         ],
         immutable=True,
     )
+    store.rpc("radar_index_history", {"p_sessions": [session]})
     return len(results)
 
 
@@ -173,6 +194,15 @@ def synchronize(store: Any, now: datetime, limit: int = 3) -> dict[str, Any]:
             "market_history_days", {"select": "session_date", "feed": f"eq.{FEED}"}
         )
     }
+    indexed = {
+        row["id"].removeprefix(f"{FEED}:")
+        for row in store.read("market_history_indexed_sessions", {"select": "id"})
+    }
+    missing_index = sorted(existing - indexed)
+    for offset in range(0, len(missing_index), 100):
+        store.rpc(
+            "radar_index_history", {"p_sessions": missing_index[offset : offset + 100]}
+        )
     wanted = [
         s
         for s in reversed(recent_sessions(now))
