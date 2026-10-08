@@ -1,6 +1,7 @@
 import pytest
 
 from engine.doctor import check
+from engine import doctor
 from engine.store import ConfigurationError, database_configuration
 
 
@@ -42,3 +43,29 @@ def test_wrong_key_type_is_rejected_without_disclosure(monkeypatch, key):
     result = check("Supabase", database_configuration)
     assert result["status"] == "FAIL"
     assert key not in result["reason"]
+
+
+def test_doctor_fails_when_required_connection_fails(monkeypatch):
+    monkeypatch.setattr(
+        doctor,
+        "check",
+        lambda name, operation: {
+            "provider": name,
+            "status": "FAIL" if name == "Supabase" else "OK",
+        },
+    )
+    with pytest.raises(SystemExit) as failure:
+        doctor.main()
+    assert failure.value.code == 1
+
+
+def test_optional_history_credential_does_not_fail_doctor(monkeypatch):
+    monkeypatch.setattr(
+        doctor,
+        "check",
+        lambda name, operation: {
+            "provider": name,
+            "status": "FAIL" if name == "Alpha Vantage" else "OK",
+        },
+    )
+    doctor.main()

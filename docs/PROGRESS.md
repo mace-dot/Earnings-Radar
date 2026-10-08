@@ -111,3 +111,9 @@ Changed the actual Vercel project from `web` / Python / `public` to `apps/web` /
 Production deployment `dpl_2xhvU4B59VbGkR1qrWGhnHWUdzg8` reached READY and owns `earnings-radar-two.vercel.app`. Live requests to `/`, `/stock/MU`, and `/moves` returned HTTP 200 with Next.js assets. Local production build passed with the cloud proxy enabled.
 
 The separate GitHub research workflow failure was inspected: run `37685933535` fails with `Supabase server configuration missing`. GitHub secret-management permission was retested and remains HTTP 403. Changing Vercel settings does not resolve this scheduled-worker credential prerequisite; no unattended coverage claim is made.
+
+## Worker connection audit and repair
+
+The worker already transports JSON through Supabase REST. Its configuration check previously conflated missing URL, invalid URL, and missing key, and the doctor returned success even when required connections failed. Added safe, specific configuration diagnostics, whitespace normalization, newer `SUPABASE_SECRET_KEY` support, wrong-key-type rejection, and nonzero doctor exit for required failures. The workflow now accepts a URL secret or repository variable and otherwise uses this project's known public API URL; server keys remain secrets only.
+
+After pushing `26e3adc`, actual GitHub doctor run `37722588796` passed Supabase, SEC, Alpaca prices/options, and Finnhub. Optional Alpha Vantage remains unavailable. This supersedes the earlier connection blocker: the URL wiring fix allowed the configured server credential to work. A dispatched queue run `37722649865` processed pending AAPL and MU requests; both database rows are completed with no error, at 03:25–03:26 UTC October 8 (11:25–11:26 PM Eastern October 7). This proves a real queued collection cycle, not complete market coverage or model validation. Engine tests now total 41 passing, including missing/invalid configuration and doctor exit semantics.
