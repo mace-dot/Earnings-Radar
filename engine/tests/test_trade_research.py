@@ -127,6 +127,7 @@ def test_grading_requires_exact_session_and_no_future_data():
         expiration_outcome(pick, bar, expiry)
     bar = {
         "session_date": "2026-11-06",
+        "close": 100,
         "as_of": (expiry + timedelta(days=1)).isoformat(),
     }
     with pytest.raises(ValueError, match="Future"):
