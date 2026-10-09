@@ -16,6 +16,7 @@ const allowed = new Set([
   "market_coverage_summary",
   "latest_price_features",
   "market_coverage",
+  "estimate_revisions",
 ]);
 export async function read<T>(
   table: string,

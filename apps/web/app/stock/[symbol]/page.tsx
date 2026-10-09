@@ -14,6 +14,9 @@ import {
 } from "@/components/context";
 import { Board } from "@/components/board";
 import { Fundamentals, type FinancialContext } from "@/components/fundamentals";
+import { EarningsHistory } from "@/components/earnings-history";
+import { marketDate } from "@/lib/time";
+import type { SavedEarning } from "@/lib/earnings-history";
 export default async function Stock({
   params,
 }: {
@@ -37,60 +40,75 @@ export default async function Stock({
       limit: "1",
     },
   );
-  const [storedBars, events, rawLines, sides, market, news, forums, coverage] =
-    await Promise.all([
-      read<Bar>("daily_bars", {
-        symbol: `eq.${symbol}`,
-        order: "session_date.desc",
-        limit: "1000",
-      }),
-      read<Event>("earnings_events", {
-        symbol: `eq.${symbol}`,
-        order: "report_date.desc",
-        limit: "12",
-      }),
-      read<Line>("lines", {
-        symbol: `eq.${symbol}`,
-        order: "as_of.desc",
-        limit: "20",
-      }),
-      read<Side>("line_sides", {
-        id: `like.${symbol}:*`,
-        order: "as_of.desc",
-        limit: "1000",
-      }),
-      read<Market>("market_observations", {
-        symbol: `eq.${symbol}`,
-        feed: "in.(iex,finnhub_free)",
-        order: "retrieved_at.desc",
-        limit: "1",
-      }),
-      read<News>("news_items", {
-        symbol: `eq.${symbol}`,
-        order: "published_at.desc",
-        limit: "12",
-      }),
-      read<Forum>("forum_posts", {
-        symbol: `eq.${symbol}`,
-        order: "published_at.desc",
-        limit: "30",
-      }),
-      read<{
-        payload: {
-          observations: {
-            source: string;
-            feed: string;
-            observed_at: string;
-            available_at: string;
-            values: { c: number; t: string };
-          }[];
-        };
-      }>("market_coverage", {
-        symbol: `eq.${symbol}`,
-        select: "payload",
-        limit: "1",
-      }),
-    ]);
+  const [
+    storedBars,
+    events,
+    rawLines,
+    sides,
+    market,
+    news,
+    forums,
+    coverage,
+    revisions,
+  ] = await Promise.all([
+    read<Bar>("daily_bars", {
+      symbol: `eq.${symbol}`,
+      order: "session_date.desc",
+      limit: "1000",
+    }),
+    read<Event>("earnings_events", {
+      symbol: `eq.${symbol}`,
+      order: "report_date.desc",
+      limit: "12",
+    }),
+    read<Line>("lines", {
+      symbol: `eq.${symbol}`,
+      order: "as_of.desc",
+      limit: "20",
+    }),
+    read<Side>("line_sides", {
+      id: `like.${symbol}:*`,
+      order: "as_of.desc",
+      limit: "1000",
+    }),
+    read<Market>("market_observations", {
+      symbol: `eq.${symbol}`,
+      feed: "in.(iex,finnhub_free)",
+      order: "retrieved_at.desc",
+      limit: "1",
+    }),
+    read<News>("news_items", {
+      symbol: `eq.${symbol}`,
+      order: "published_at.desc",
+      limit: "12",
+    }),
+    read<Forum>("forum_posts", {
+      symbol: `eq.${symbol}`,
+      order: "published_at.desc",
+      limit: "30",
+    }),
+    read<{
+      payload: {
+        observations: {
+          source: string;
+          feed: string;
+          observed_at: string;
+          available_at: string;
+          values: { c: number; t: string };
+        }[];
+      };
+    }>("market_coverage", {
+      symbol: `eq.${symbol}`,
+      select: "payload",
+      limit: "1",
+    }),
+    read<SavedEarning>("estimate_revisions", {
+      symbol: `eq.${symbol}`,
+      source: "eq.Alpha Vantage",
+      order: "period.desc",
+      limit: "8",
+    }),
+  ]);
   const coverageBars: Bar[] = (coverage[0]?.payload.observations ?? []).map(
     (o) => ({
       session_date: o.values.t.slice(0, 10),
@@ -131,6 +149,10 @@ export default async function Stock({
         {company.sector} · {company.exchange}
       </p>
       <Fundamentals context={financial[0]?.payload} sector={company.sector} />
+      <EarningsHistory
+        rows={revisions}
+        waiting={events.some((event) => event.report_date >= marketDate())}
+      />
       <div className="two-column">
         <section className="panel">
           <h2>What the price has done</h2>

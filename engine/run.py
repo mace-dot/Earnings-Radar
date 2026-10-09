@@ -8,6 +8,7 @@ from typing import Any
 
 import httpx
 
+from engine.alpha_budget import calendar_collected, requests_used, budget_day
 from engine.calendar import reconcile
 from engine.features import price_features
 from engine.move_features import setup_features
@@ -17,7 +18,7 @@ from engine.providers.base import Observation
 from engine.providers.market import Finnhub
 from engine.providers.public_market import Nasdaq
 from engine.providers.daily_history import history_provider
-from engine.providers.alpha_vantage import AlphaVantage
+from engine.providers.alpha_vantage import AlphaVantage, QuotaExceeded
 from engine.providers.sec import SEC
 from engine.store import Store
 
@@ -84,7 +85,26 @@ def universe(store: Store) -> dict[str, Any]:
 
 def calendar(store: Store, now: datetime) -> dict[str, Any]:
     observations, errors = [], []
+    av_requests: list[dict[str, str]] = []
+    day_start = now.astimezone(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    runs = store.read(
+        "engine_runs",
+        {
+            "select": "job,as_of,status,payload",
+            "as_of": f"gte.{day_start.isoformat()}",
+            "order": "as_of.desc",
+            "limit": "500",
+        },
+    )
+    skip_alpha = (
+        calendar_collected(runs, budget_day(now))
+        or requests_used(runs, budget_day(now)) >= 24
+    )
     for provider in (Finnhub, AlphaVantage):
+        if provider is AlphaVantage and skip_alpha:
+            continue
         try:
             observations.extend(
                 provider().calendar(
@@ -92,10 +112,19 @@ def calendar(store: Store, now: datetime) -> dict[str, Any]:
                     (now + timedelta(days=60)).date().isoformat(),
                 )
             )
+            if provider is AlphaVantage:
+                av_requests.append({"function": "EARNINGS_CALENDAR", "status": "ok"})
+        except QuotaExceeded:
+            av_requests.append({"function": "EARNINGS_CALENDAR", "status": "quota"})
+            errors.append(
+                {"provider": provider.__name__, "error_type": "QuotaExceeded"}
+            )
         except Exception as exc:
             errors.append(
                 {"provider": provider.__name__, "error_type": type(exc).__name__}
             )
+            if provider is AlphaVantage:
+                av_requests.append({"function": "EARNINGS_CALENDAR", "status": "error"})
     if not observations:
         raise RuntimeError("No calendar feed available; cached events preserved")
     events = reconcile(observations, datetime.now(timezone.utc))
@@ -104,7 +133,11 @@ def calendar(store: Store, now: datetime) -> dict[str, Any]:
     events = [row for row in events if row["symbol"] in known]
     for offset in range(0, len(events), 300):
         store.write("earnings_events", events[offset : offset + 300])
-    return {"events": len(events), "provider_errors": errors}
+    return {
+        "events": len(events),
+        "provider_errors": errors,
+        "alpha_vantage_requests": av_requests,
+    }
 
 
 def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
@@ -469,6 +502,7 @@ def main() -> None:
             "history_sync",
             "validate",
             "fundamentals",
+            "alpha_scan",
         ],
     )
     parser.add_argument("--symbols", default="")
@@ -509,6 +543,10 @@ def main() -> None:
                 ),
                 "rule": "exchange-directory-name-v1",
             }
+        elif job == "alpha_scan":
+            from engine.alpha_scan import collect
+
+            payload = collect(store, now)
         elif job == "fundamentals":
             from engine.fundamentals import collect
 

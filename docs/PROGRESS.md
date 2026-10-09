@@ -252,3 +252,8 @@ Specification written in `docs/PREDICTIVE_BALANCE_PLAN.md`. It makes large-move 
 - [ ] Phase 8: Prospective ablation against the price-only baseline. No self-approval. No invented forum history.
 
 Not started, and not claimed: liquidity-sweep detection, calibrated large-move probabilities, Reddit or Seeking Alpha collection, TradingView community text, Market Chameleon earnings or option-trade collection.
+
+## Alpha Vantage daily budget
+
+- [x] Plan: one calendar call, then up to 23 `EARNINGS` histories for upcoming reports, one spare call, no price or news calls. See `engine/alpha_budget.py`.
+- [ ] First scheduled `alpha_scan` result recorded after the code is deployed.

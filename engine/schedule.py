@@ -10,7 +10,7 @@ from engine.store import Store
 
 SLOTS = {
     (6, 0): ["universe", "listings", "sectors", "fundamentals"],
-    (6, 15): ["calendar"],
+    (6, 15): ["calendar", "alpha_scan"],
     (18, 0): ["calendar"],
     (9, 45): ["context", "score"],
     (12, 0): ["context", "score"],
@@ -42,9 +42,11 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
                 due[job] = slot
     completed = {}
     for run in runs:
+        payload = run.get("payload") or {}
         usable_partial = run["status"] == "partial" and bool(
-            run.get("payload", {}).get("events")
-            or run.get("payload", {}).get("processed_symbols")
+            payload.get("events")
+            or payload.get("processed_symbols")
+            or payload.get("budget_complete")
         )
         if run["status"] != "completed" and not usable_partial:
             continue
@@ -58,6 +60,7 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
             "listings",
             "sectors",
             "calendar",
+            "alpha_scan",
             "prices",
             "context",
             "score",
