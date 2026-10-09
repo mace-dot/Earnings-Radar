@@ -29,4 +29,4 @@ A symbol that already has a pre-report snapshot is skipped until the report date
 
 ## Stop rules
 
-A provider limit message stops the rest of the run and records `quota`. The workflow then treats that pass as finished for the day. Authentication and entitlement failures are not retried in a loop.
+A daily-cap message stops the rest of the run. A too-many-calls-per-minute message waits and retries, and does not close the day. Authentication failures are not retried in a loop.

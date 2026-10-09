@@ -92,7 +92,7 @@ def test_missing_estimate_stays_missing_and_limit_stops_the_batch():
     )
     assert rows[0]["payload"]["reported_eps"] == 1.25
     assert rows[0]["payload"]["estimated_eps"] is None
-    with pytest.raises(QuotaExceeded):
+    with pytest.raises(QuotaExceeded) as daily:
         normalize_earnings(
             "AAPL",
             {
@@ -100,6 +100,16 @@ def test_missing_estimate_stays_missing_and_limit_stops_the_batch():
             },
             retrieved,
         )
+    assert daily.value.kind == "daily"
+    with pytest.raises(QuotaExceeded) as pace:
+        normalize_earnings(
+            "AAPL",
+            {
+                "Note": "Please consider spreading out your requests. Limit is 5 per minute."
+            },
+            retrieved,
+        )
+    assert pace.value.kind == "pace"
 
 
 def test_alpha_scan_waits_until_the_morning_slot_and_does_not_repeat():

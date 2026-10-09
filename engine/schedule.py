@@ -43,10 +43,20 @@ def pending_jobs(now: datetime, runs: list[dict]) -> list[str]:
     completed = {}
     for run in runs:
         payload = run.get("payload") or {}
-        usable_partial = run["status"] == "partial" and bool(
-            payload.get("events")
-            or payload.get("processed_symbols")
-            or payload.get("budget_complete")
+        # A quota stop after only a few calls can be a per-minute limit, so it stays retryable.
+        early_quota = (
+            run["job"] == "alpha_scan"
+            and payload.get("stopped") == "quota"
+            and not payload.get("daily_cap")
+        )
+        usable_partial = (
+            run["status"] == "partial"
+            and not early_quota
+            and bool(
+                payload.get("events")
+                or payload.get("processed_symbols")
+                or payload.get("budget_complete")
+            )
         )
         if run["status"] != "completed" and not usable_partial:
             continue

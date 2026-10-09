@@ -1,5 +1,6 @@
 """One weekday pass that spends the remaining free Alpha Vantage calls."""
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -48,47 +49,68 @@ def collect(store: Any, now: datetime, provider: Any | None = None) -> dict[str,
     requests: list[dict[str, Any]] = []
     saved = 0
     stopped = None
+    daily_cap = False
     for symbol in budget["symbols"]:
-        try:
-            rows = source.earnings(symbol)
-        except QuotaExceeded:
-            requests.append(
-                {"function": "EARNINGS", "symbol": symbol, "status": "quota"}
-            )
-            stopped = "quota"
+        if requests:
+            time.sleep(12)
+        rows = None
+        for attempt in range(3):
+            try:
+                rows = source.earnings(symbol)
+                break
+            except QuotaExceeded as exc:
+                if exc.kind == "pace" and attempt < 2:
+                    time.sleep(15)
+                    continue
+                requests.append(
+                    {
+                        "function": "EARNINGS",
+                        "symbol": symbol,
+                        "status": "quota",
+                        "limit_kind": exc.kind,
+                    }
+                )
+                stopped = "quota"
+                daily_cap = exc.kind == "daily"
+                rows = None
+                break
+            except Exception as exc:
+                requests.append(
+                    {
+                        "function": "EARNINGS",
+                        "symbol": symbol,
+                        "status": "error",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+                rows = None
+                break
+        if stopped == "quota":
             break
-        except Exception as exc:
-            requests.append(
-                {
-                    "function": "EARNINGS",
-                    "symbol": symbol,
-                    "status": "error",
-                    "error_type": type(exc).__name__,
-                }
-            )
+        if rows is None:
             continue
-        if rows:
-            for offset in range(0, len(rows), 300):
-                store.write("estimate_revisions", rows[offset : offset + 300])
-            saved += len(rows)
-            reported = [
-                row["payload"]["reported_date"]
-                for row in rows
-                if row["payload"].get("reported_date")
-            ]
-            requests.append(
-                {
-                    "function": "EARNINGS",
-                    "symbol": symbol,
-                    "status": "ok",
-                    "quarters": len(rows),
-                    "latest_reported": max(reported) if reported else None,
-                }
-            )
-        else:
+        if not rows:
             requests.append(
                 {"function": "EARNINGS", "symbol": symbol, "status": "empty"}
             )
+            continue
+        for offset in range(0, len(rows), 300):
+            store.write("estimate_revisions", rows[offset : offset + 300])
+        saved += len(rows)
+        reported = [
+            row["payload"]["reported_date"]
+            for row in rows
+            if row["payload"].get("reported_date")
+        ]
+        requests.append(
+            {
+                "function": "EARNINGS",
+                "symbol": symbol,
+                "status": "ok",
+                "quarters": len(rows),
+                "latest_reported": max(reported) if reported else None,
+            }
+        )
     errors = [row for row in requests if row["status"] in {"error", "quota"}]
     return {
         "alpha_vantage_requests": requests,
@@ -100,6 +122,7 @@ def collect(store: Any, now: datetime, provider: Any | None = None) -> dict[str,
         "spare": budget["spare"],
         "budget_day": budget["budget_day"],
         "stopped": stopped,
+        "daily_cap": daily_cap,
         "budget_complete": True,
         "provider_errors": errors,
     }

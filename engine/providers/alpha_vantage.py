@@ -16,7 +16,13 @@ SYMBOL = re.compile(r"[A-Z0-9][A-Z0-9.-]{0,14}")
 
 
 class QuotaExceeded(RuntimeError):
-    """The free daily allowance rejected another call. The body is not retained."""
+    """A rate response with no provider body retained. `kind` is `daily` or `pace`."""
+
+    def __init__(self, kind: str) -> None:
+        if kind not in {"daily", "pace"}:
+            raise ValueError("Unknown quota kind")
+        super().__init__(kind)
+        self.kind = kind
 
 
 def _key() -> str:
@@ -30,18 +36,15 @@ def _reject_quota(payload: dict[str, Any]) -> None:
     message = " ".join(
         str(payload.get(name, "")) for name in ("Note", "Information", "Error Message")
     ).lower()
+    if not message.strip():
+        return
+    if "per day" in message or "25 requests" in message:
+        raise QuotaExceeded("daily")
     if any(
         phrase in message
-        for phrase in (
-            "call frequency",
-            "api call volume",
-            "higher api call",
-            "spreading out",
-            "thank you for using alpha vantage",
-            "premium",
-        )
+        for phrase in ("per minute", "call frequency", "spreading out", "thank you")
     ):
-        raise QuotaExceeded("Alpha Vantage request limit reached")
+        raise QuotaExceeded("pace")
 
 
 def _optional_number(value: Any) -> float | None:
