@@ -256,4 +256,4 @@ Not started, and not claimed: liquidity-sweep detection, calibrated large-move p
 ## Alpha Vantage daily budget
 
 - [x] Plan: one calendar call, then up to 23 `EARNINGS` histories for upcoming reports, one spare call, no price or news calls. See `engine/alpha_budget.py`.
-- [ ] First scheduled `alpha_scan` result recorded after the code is deployed.
+- [x] Manual scan on 2026-10-09 UTC, run 37877128167: 21 history calls, 930 quarters saved, 5 symbols returned no history, no daily-cap stop. One spare call was left unused. A faster first attempt was a pace limit and was retried with a 12-second gap.
