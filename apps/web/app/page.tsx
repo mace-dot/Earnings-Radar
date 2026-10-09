@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { marketDate } from "@/lib/time";
 import { read } from "@/lib/db";
+import { matchesCompany, narrowestWord } from "@/lib/company-search";
 import type { Security, Line, Side, Event, Pick } from "@/lib/types";
 import { chooseBoard } from "@/lib/board-selection";
 import { ResearchSwitch } from "@/components/research-switch";
@@ -47,11 +49,16 @@ export default async function Page({
   try {
     const today = marketDate();
     if (term) {
-      companies = await read<Security>("securities", {
-        order: "symbol.asc",
-        limit: "60",
-        or: `(symbol.ilike.*${term}*,name.ilike.*${term}*)`,
-      });
+      const word = narrowestWord(term);
+      const found = word
+        ? await read<Security>("securities", {
+            order: "symbol.asc",
+            limit: "200",
+            or: `(symbol.ilike.*${word}*,name.ilike.*${word}*)`,
+          })
+        : [];
+      companies = found.filter((company) => matchesCompany(company, term));
+      if (companies.length === 1) redirect(`/stock/${companies[0].symbol}`);
     } else {
       const [calendar, published] = await Promise.all([
         read<Event>("earnings_events", {
