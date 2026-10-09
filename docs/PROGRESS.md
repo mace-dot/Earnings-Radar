@@ -258,3 +258,7 @@ Not started, and not claimed: liquidity-sweep detection, calibrated large-move p
 - [x] Plan: one calendar call, then up to 23 `EARNINGS` histories for upcoming reports, one spare call, no price or news calls. See `engine/alpha_budget.py`.
 - [x] Manual scan on 2026-10-09 UTC, run 37877128167: 21 history calls, 930 quarters saved, 5 symbols returned no history, no daily-cap stop. One spare call was left unused. A faster first attempt was a pace limit and was retried with a 12-second gap.
 - [x] Forward cases from this change use `forward-price-magnitude-v2`: days to the report, 20-session volume and range multiples, a Cboe implied move saved from today forward, SPY's recent return and 60-session realized volatility, and saved earnings surprise and beat rate. Older v1 cases stay separate. The implied-move series cannot be backfilled.
+
+## Board speed and calendar — 2026-10-09
+
+The saved calendar has 1,431 reports, but the earliest date is 2026-11-09, so the old “this week” board was empty and company pages said the calendar was not connected. The board now switches between researched names and the next saved reports without reloading, and Finnhub is requested in one-week chunks so near-term dates are not dropped on the next collection.

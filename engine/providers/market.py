@@ -1,13 +1,28 @@
 """Alpaca bars and Finnhub calendar. Feed identity is never discarded."""
 
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
 
 from engine.providers.base import Observation
+
+
+def calendar_chunks(start: str, end: str, days: int = 7) -> list[tuple[str, str]]:
+    if days < 1:
+        raise ValueError("Calendar chunk must cover at least one day")
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    if cursor > last:
+        return []
+    chunks = []
+    while cursor <= last:
+        chunk_end = min(cursor + timedelta(days=days - 1), last)
+        chunks.append((cursor.isoformat(), chunk_end.isoformat()))
+        cursor = chunk_end + timedelta(days=1)
+    return chunks
 
 
 def stamp(value: str) -> datetime:
@@ -118,20 +133,27 @@ class Finnhub:
         self.client = httpx.Client(timeout=45, headers={"X-Finnhub-Token": key})
 
     def calendar(self, start: str, end: str) -> list[Observation]:
-        response = self.client.get(
-            "https://finnhub.io/api/v1/calendar/earnings",
-            params={"from": start, "to": end},
-        )
-        response.raise_for_status()
-        data = response.json()
-        if "error" in data:
-            raise RuntimeError("Calendar feed unavailable for this account")
+        # A wide from/to request comes back as only the far end of the window.
+        # Short chunks keep the reports that are actually coming up.
         now = datetime.now(timezone.utc)
-        return [
-            Observation(item["symbol"], now, now, "Finnhub", item)
-            for item in data.get("earningsCalendar", [])
-            if item.get("symbol") and item.get("date")
-        ]
+        seen: set[tuple[str, str]] = set()
+        output = []
+        for chunk_start, chunk_end in calendar_chunks(start, end):
+            response = self.client.get(
+                "https://finnhub.io/api/v1/calendar/earnings",
+                params={"from": chunk_start, "to": chunk_end},
+            )
+            response.raise_for_status()
+            data = response.json()
+            if "error" in data:
+                raise RuntimeError("Calendar feed unavailable for this account")
+            for item in data.get("earningsCalendar", []):
+                symbol, report = item.get("symbol"), item.get("date")
+                if not symbol or not report or (symbol, report) in seen:
+                    continue
+                seen.add((symbol, report))
+                output.append(Observation(symbol, now, now, "Finnhub", item))
+        return output
 
     def quote(self, symbol: str) -> dict[str, Any]:
         response = self.client.get(

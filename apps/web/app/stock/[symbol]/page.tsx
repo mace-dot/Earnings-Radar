@@ -25,22 +25,9 @@ export default async function Stock({
   const { symbol: raw } = await params;
   const symbol = raw.toUpperCase();
   if (!/^[A-Z0-9][A-Z0-9.-]{0,14}$/.test(symbol)) notFound();
-  const companies = await read<Security>("securities", {
-    symbol: `eq.${symbol}`,
-    limit: "1",
-  });
-  if (!companies.length) notFound();
-  const company = companies[0];
-  const financial = await read<{ payload: FinancialContext }>(
-    "market_observations",
-    {
-      symbol: `eq.${symbol}`,
-      feed: "eq.sec_fundamentals",
-      order: "retrieved_at.desc",
-      limit: "1",
-    },
-  );
   const [
+    companies,
+    financial,
     storedBars,
     events,
     rawLines,
@@ -50,11 +37,22 @@ export default async function Stock({
     forums,
     coverage,
     revisions,
+    calendar,
   ] = await Promise.all([
+    read<Security>("securities", {
+      symbol: `eq.${symbol}`,
+      limit: "1",
+    }),
+    read<{ payload: FinancialContext }>("market_observations", {
+      symbol: `eq.${symbol}`,
+      feed: "eq.sec_fundamentals",
+      order: "retrieved_at.desc",
+      limit: "1",
+    }),
     read<Bar>("daily_bars", {
       symbol: `eq.${symbol}`,
       order: "session_date.desc",
-      limit: "1000",
+      limit: "260",
     }),
     read<Event>("earnings_events", {
       symbol: `eq.${symbol}`,
@@ -69,7 +67,7 @@ export default async function Stock({
     read<Side>("line_sides", {
       id: `like.${symbol}:*`,
       order: "as_of.desc",
-      limit: "1000",
+      limit: "80",
     }),
     read<Market>("market_observations", {
       symbol: `eq.${symbol}`,
@@ -108,7 +106,15 @@ export default async function Stock({
       order: "period.desc",
       limit: "8",
     }),
+    read<Event>("earnings_events", {
+      report_date: `gte.${marketDate()}`,
+      select: "report_date",
+      order: "report_date.asc",
+      limit: "1",
+    }),
   ]);
+  if (!companies.length) notFound();
+  const company = companies[0];
   const coverageBars: Bar[] = (coverage[0]?.payload.observations ?? []).map(
     (o) => ({
       session_date: o.values.t.slice(0, 10),
@@ -175,8 +181,9 @@ export default async function Stock({
             ))
           ) : (
             <p className="muted">
-              No earnings calendar connected yet. Filing dates are not used as
-              upcoming report dates.
+              {calendar.length
+                ? `The earnings calendar is connected. The next saved reports start ${calendar[0].report_date}. This company is not on that list. Filing dates are not used as report dates.`
+                : "No earnings calendar connected yet. Filing dates are not used as upcoming report dates."}
             </p>
           )}
         </section>

@@ -1,8 +1,33 @@
 import { marketDate } from "@/lib/time";
-import Link from "next/link";
 import { read } from "@/lib/db";
 import type { Security, Line, Side, Event, Pick } from "@/lib/types";
-import { Board } from "@/components/board";
+import { chooseBoard } from "@/lib/board-selection";
+import { ResearchSwitch } from "@/components/research-switch";
+
+function pack(
+  symbols: string[],
+  companies: Security[],
+  lines: Line[],
+  events: Event[],
+) {
+  const wanted = new Set(symbols);
+  const reportDate = new Map(
+    events.map((event) => [event.symbol, event.report_date]),
+  );
+  return {
+    companies: companies
+      .filter((company) => wanted.has(company.symbol))
+      .sort(
+        (a, b) =>
+          (reportDate.get(a.symbol) ?? "9999-99-99").localeCompare(
+            reportDate.get(b.symbol) ?? "9999-99-99",
+          ) || a.symbol.localeCompare(b.symbol),
+      ),
+    lines: lines.filter((line) => wanted.has(line.symbol)),
+    events: events.filter((event) => wanted.has(event.symbol)),
+  };
+}
+
 export default async function Page({
   searchParams,
 }: {
@@ -13,69 +38,87 @@ export default async function Page({
     .trim()
     .replace(/[^a-zA-Z0-9 .-]/g, "")
     .slice(0, 60);
-  let companies: Security[] = [],
-    lines: Line[] = [],
-    events: Event[] = [],
-    unavailable = false,
-    automaticShown = false;
+  let companies: Security[] = [];
+  let lines: Line[] = [];
+  let events: Event[] = [];
+  let unavailable = false;
+  let choice = chooseBoard([], [], marketDate(), view);
+  let pickSymbols: string[] = [];
   try {
     const today = marketDate();
-    const weekEnd = new Date(Date.parse(`${today}T12:00:00Z`) + 7 * 86400000)
-      .toISOString()
-      .slice(0, 10);
-    const weekly = term
-      ? []
-      : await read<Event>("earnings_events", {
-          and: `(report_date.gte.${today},report_date.lte.${weekEnd})`,
+    if (term) {
+      companies = await read<Security>("securities", {
+        order: "symbol.asc",
+        limit: "60",
+        or: `(symbol.ilike.*${term}*,name.ilike.*${term}*)`,
+      });
+    } else {
+      const [calendar, published] = await Promise.all([
+        read<Event>("earnings_events", {
+          report_date: `gte.${today}`,
           order: "report_date.asc",
+          limit: "80",
+        }),
+        read<Pick>("picks", {
+          order: "as_of.desc",
+          expires_at: `gt.${new Date().toISOString()}`,
           limit: "60",
+        }),
+      ]);
+      choice = chooseBoard(calendar, published, today, view);
+      pickSymbols = [...new Set(published.map((pick) => pick.symbol))];
+      const symbols = [
+        ...new Set([
+          ...choice.symbols,
+          ...published.map((pick) => pick.symbol),
+        ]),
+      ];
+      const earningsSymbols = [
+        ...new Set(
+          calendar
+            .filter((event) => event.report_date >= today)
+            .slice(0, 60)
+            .map((event) => event.symbol),
+        ),
+      ];
+      const boardSymbols = [...new Set([...symbols, ...earningsSymbols])].slice(
+        0,
+        80,
+      );
+      if (boardSymbols.length) {
+        companies = await read<Security>("securities", {
+          order: "symbol.asc",
+          limit: "80",
+          symbol: `in.(${boardSymbols.join(",")})`,
         });
-    const published =
-      term || view === "earnings"
-        ? []
-        : await read<Pick>("picks", {
-            order: "as_of.desc",
-            expires_at: `gt.${new Date().toISOString()}`,
-            limit: "60",
-          });
-    automaticShown = published.length > 0;
-    const boardSymbols = [
-      ...new Set(
-        published.length
-          ? published.map((p) => p.symbol)
-          : weekly.map((e) => e.symbol),
-      ),
-    ].join(",");
-    companies = await read<Security>("securities", {
-      order: "symbol.asc",
-      limit: "60",
-      ...(term
-        ? { or: `(symbol.ilike.*${term}*,name.ilike.*${term}*)` }
-        : { ...(boardSymbols ? { symbol: `in.(${boardSymbols})` } : {}) }),
-    });
-    const symbols = companies.map((c) => c.symbol).join(",");
+      }
+      events = calendar;
+    }
+    const symbols = companies.map((company) => company.symbol).join(",");
     if (symbols) {
       const [rawLines, sides, calendar] = await Promise.all([
         read<Line>("lines", {
           symbol: `in.(${symbols})`,
           order: "as_of.desc",
-          limit: "500",
+          limit: "400",
         }),
         read<Side>("line_sides", {
-          or: `(${companies.map((c) => `id.like.${c.symbol}:*`).join(",")})`,
+          or: `(${companies.map((company) => `id.like.${company.symbol}:*`).join(",")})`,
           order: "as_of.desc",
-          limit: "1000",
+          limit: "800",
         }),
-        read<Event>("earnings_events", {
-          symbol: `in.(${symbols})`,
-          order: "report_date.asc",
-          limit: "100",
-        }),
+        term
+          ? read<Event>("earnings_events", {
+              symbol: `in.(${symbols})`,
+              order: "report_date.asc",
+              limit: "100",
+            })
+          : Promise.resolve(events),
       ]);
       const seen = new Set<string>();
       lines = rawLines
-        .filter((l) => {
-          const key = `${l.symbol}:${l.kind}`;
+        .filter((line) => {
+          const key = `${line.symbol}:${line.kind}`;
           if (
             ![
               "Swing",
@@ -84,22 +127,30 @@ export default async function Page({
               "Direction",
               "IV Ramp",
               "Drift",
-            ].includes(l.kind) ||
+            ].includes(line.kind) ||
             seen.has(key)
           )
             return false;
           seen.add(key);
           return true;
         })
-        .map((l) => ({
-          ...l,
-          sides: sides.filter((s) => s.id.startsWith(`${l.id}:`)),
+        .map((line) => ({
+          ...line,
+          sides: sides.filter((side) => side.id.startsWith(`${line.id}:`)),
         }));
       events = calendar;
     }
   } catch {
     unavailable = true;
   }
+  const earningsSymbols = [
+    ...new Set(
+      events
+        .filter((event) => event.report_date >= marketDate())
+        .map((event) => event.symbol),
+    ),
+  ];
+  const radarSymbols = pickSymbols.length ? pickSymbols : choice.symbols;
   return (
     <>
       <section className="hero">
@@ -116,29 +167,10 @@ export default async function Page({
           </p>
         </div>
         <div className="panel">
-          <strong>
-            {automaticShown
-              ? "Automatically researched setups"
-              : "Reporting this week"}
-          </strong>
-          <p className="muted">
-            Before earnings · Earnings reaction · After earnings
-            <br />
-            Volatility · Longer swing
-          </p>
+          <strong>Before earnings · Earnings reaction · After earnings</strong>
+          <p className="muted">Volatility · Longer swing</p>
         </div>
       </section>
-      <nav className="toolbar" aria-label="Research board views">
-        <Link className="button" href="/?view=radar">
-          Automatic research
-        </Link>
-        <Link className="button" href="/?view=earnings">
-          Earnings this week
-        </Link>
-        <Link className="button" href="/moves">
-          Quiet setups
-        </Link>
-      </nav>
       <form className="toolbar" role="search">
         <input type="hidden" name="view" value={view} />
         <label className="sr-only" htmlFor="search">
@@ -160,7 +192,21 @@ export default async function Page({
           unavailable; no data is invented.
         </div>
       )}
-      <Board companies={companies} lines={lines} events={events} />
+      {term ? (
+        <ResearchSwitch
+          initial="earnings"
+          earningsLabel="Search results"
+          radar={{ companies, lines, events }}
+          earnings={{ companies, lines, events }}
+        />
+      ) : (
+        <ResearchSwitch
+          initial={choice.mode}
+          earningsLabel={choice.earningsLabel}
+          radar={pack(radarSymbols, companies, lines, events)}
+          earnings={pack(earningsSymbols, companies, lines, events)}
+        />
+      )}
     </>
   );
 }

@@ -22,7 +22,7 @@ export default async function Moves() {
       order: "values->vol_compression_ratio.asc.nullslast",
       "values->>vol_compression_ratio": "lt.0.8",
       select: "id,symbol,as_of,values",
-      limit: "1000",
+      limit: "30",
     });
   } catch {
     error = true;

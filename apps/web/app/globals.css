@@ -116,6 +116,10 @@ input {
 .button:hover {
   border-color: var(--violet);
 }
+.button[aria-pressed="true"] {
+  border-color: var(--green);
+  color: var(--green);
+}
 .button:disabled {
   opacity: 0.5;
   cursor: not-allowed;

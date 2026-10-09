@@ -130,13 +130,13 @@ test("automatic research and weekly earnings have separate board views", async (
   const navigation = page.getByRole("navigation", {
     name: "Research board views",
   });
-  await navigation.getByRole("link", { name: "Earnings this week" }).click();
-  await expect(page).toHaveURL(/view=earnings/);
+  await navigation
+    .getByRole("button", { name: /Earnings this week|Next saved reports/ })
+    .click();
   await expect(
-    page.getByText("Reporting this week", { exact: true }),
+    page.getByText(/Earnings this week|Next saved reports/),
   ).toBeVisible();
-  await navigation.getByRole("link", { name: "Automatic research" }).click();
-  await expect(page).toHaveURL(/view=radar/);
+  await navigation.getByRole("button", { name: "Automatic research" }).click();
   await expect(
     page.getByText("Automatically researched setups", { exact: true }),
   ).toBeVisible();
