@@ -57,6 +57,13 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
         )
         bars = []
     cutoff = datetime.now(timezone.utc)
+    from engine.predictive_context import bar_values, context_features, load_context
+
+    context_rows = (
+        load_context(store, [row["symbol"] for row in claims], cutoff)
+        if bars
+        else {"events": {}, "revisions": {}, "implied": {}, "spy": {}}
+    )
     covered = 0
     failed_count = 0
     feature_rows = []
@@ -100,7 +107,19 @@ def market_scan(store: Store, limit: int = 100) -> dict[str, Any]:
             },
         )
         if applied and observed:
-            feature = payload["features"]
+            feature = {
+                **payload["features"],
+                **context_features(
+                    bar_values(
+                        sorted(observed, key=lambda item: item.observed_at), cutoff
+                    ),
+                    context_rows["events"].get(symbol, []),
+                    context_rows["revisions"].get(symbol, []),
+                    context_rows["implied"].get(symbol, []),
+                    context_rows["spy"],
+                    cutoff,
+                ),
+            }
             feature_rows.append(
                 {
                     "id": f"{symbol}:market-scan-v1",

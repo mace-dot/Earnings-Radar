@@ -4,6 +4,7 @@ import pytest
 
 from engine.models import eligible_probability
 from engine.validation import (
+    KEYS,
     capture,
     outcome,
     chronological_report,
@@ -210,6 +211,10 @@ def test_snapshots_freeze_real_features_and_reject_unknown_feed():
 
     database = Database()
     assert capture(database, NOW)["snapshots"] == 1
+    vector = database.saved[0]["payload"]["feature_vector"]
+    assert len(vector) == len(KEYS)
+    assert vector[KEYS.index("implied_move")] is None
+    assert vector[KEYS.index("implied_move_known")] == 0
     assert database.saved[0]["payload"]["feature_values"]["last_close"] == 100
     assert database.saved[0]["payload"]["observation_ids"] == ["fixture-observation"]
     database.feed = "unverified_fixture_feed"

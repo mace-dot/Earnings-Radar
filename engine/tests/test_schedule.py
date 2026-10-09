@@ -6,7 +6,9 @@ from engine.schedule import pending_jobs
 
 def test_late_start_still_runs_grading():
     now = datetime(2026, 10, 8, 17, 53, tzinfo=ZoneInfo("America/New_York"))
-    assert "grade" in pending_jobs(now, [])
+    jobs = pending_jobs(now, [])
+    assert "grade" in jobs
+    assert jobs.index("implied_archive") < jobs.index("prices")
     runs = [
         {"job": job, "as_of": now.isoformat(), "status": "completed"}
         for job in pending_jobs(now, [])

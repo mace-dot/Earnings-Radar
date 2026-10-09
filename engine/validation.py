@@ -12,10 +12,47 @@ from sklearn.metrics import brier_score_loss
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-VERSION = "forward-price-magnitude-v1"
+VERSION = "forward-price-magnitude-v2"
 THRESHOLD = 0.05
 HORIZON = 5
-KEYS = ("return_5", "return_20", "rv_10", "rv_60", "vol_compression_ratio")
+KEYS = (
+    "return_5",
+    "return_20",
+    "rv_10",
+    "rv_60",
+    "vol_compression_ratio",
+    "days_to_report",
+    "days_to_report_known",
+    "volume_multiple_20",
+    "volume_multiple_20_known",
+    "range_multiple_20",
+    "range_multiple_20_known",
+    "implied_move",
+    "implied_move_known",
+    "spy_return_5",
+    "spy_return_5_known",
+    "spy_rv_60",
+    "spy_rv_60_known",
+    "last_surprise",
+    "last_surprise_known",
+    "beat_rate_4",
+    "beat_rate_4_known",
+)
+
+
+def feature_vector(values: dict[str, Any]) -> list[Any]:
+    """Keep a missing input missing, and give the model an explicit known flag."""
+    vector = []
+    for key in KEYS:
+        if key.endswith("_known"):
+            flag = values.get(key)
+            base = key[: -len("_known")]
+            vector.append(
+                int(flag) if flag in (0, 1) else 0 if values.get(base) is None else 1
+            )
+        else:
+            vector.append(values.get(key))
+    return vector
 
 
 def calendar(now: datetime) -> Any:
@@ -102,7 +139,7 @@ def capture(store: Any, now: datetime, limit: int = 500) -> dict[str, Any]:
                     "target": "Absolute sourced close-to-close stock change over five future exchange sessions exceeds 5%; not option profit",
                     "base_close": f["last_close"],
                     "feature_keys": list(KEYS),
-                    "feature_vector": [f.get(key) for key in KEYS],
+                    "feature_vector": feature_vector(f),
                     "feature_id": row["id"],
                     "feature_as_of": row["as_of"],
                     "feature_version": row["version"],

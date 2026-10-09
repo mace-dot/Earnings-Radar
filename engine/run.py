@@ -183,6 +183,8 @@ def prices(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
 
 
 def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
+    from engine.predictive_context import bar_values, context_features, load_context
+
     count = 0
     missing_prices = 0
     for offset in range(0, len(symbols), 100):
@@ -222,6 +224,7 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
             },
         )
         feature_rows, line_rows, side_rows, pick_rows = [], [], [], []
+        context_rows = load_context(store, batch, now)
         for symbol in batch:
             matching = [row for row in all_bars if row["symbol"] == symbol]
             preferred = [row for row in matching if row["source"] == "Massive"]
@@ -249,6 +252,14 @@ def score(store: Store, now: datetime, symbols: list[str]) -> dict[str, Any]:
             feature = {
                 **price_features(observations, now),
                 **setup_features(observations, now),
+                **context_features(
+                    bar_values(observations, now),
+                    context_rows["events"].get(symbol, []),
+                    context_rows["revisions"].get(symbol, []),
+                    context_rows["implied"].get(symbol, []),
+                    context_rows["spy"],
+                    now,
+                ),
             }
             identity = next((row for row in identities if row["symbol"] == symbol), {})
             feature["asset_type"] = identity.get("asset_type", "unverified")
@@ -503,6 +514,7 @@ def main() -> None:
             "validate",
             "fundamentals",
             "alpha_scan",
+            "implied_archive",
         ],
     )
     parser.add_argument("--symbols", default="")
@@ -547,6 +559,10 @@ def main() -> None:
             from engine.alpha_scan import collect
 
             payload = collect(store, now)
+        elif job == "implied_archive":
+            from engine.implied_archive import collect as archive_implied
+
+            payload = archive_implied(store, now)
         elif job == "fundamentals":
             from engine.fundamentals import collect
 
@@ -737,7 +753,9 @@ def main() -> None:
             )
         status = (
             "partial"
-            if payload.get("provider_errors") or payload.get("provider_failures")
+            if payload.get("provider_errors")
+            or payload.get("provider_failures")
+            or payload.get("continue_today")
             else "completed"
         )
     except Exception as exc:

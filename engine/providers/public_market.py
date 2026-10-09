@@ -165,3 +165,55 @@ class Cboe:
             )
             for row in data.get("data", {}).get("options", [])
         ]
+
+    def event_implied(self, symbol: str, report_date: str, as_of: datetime) -> dict:
+        """Delayed straddle after the report date. The full chain is not stored."""
+        from engine.options_estimates import chain_estimate
+
+        response = self.client.get(
+            f"https://cdn.cboe.com/api/global/delayed_quotes/options/{symbol}.json"
+        )
+        response.raise_for_status()
+        body = response.json()
+        retrieved = datetime.now(timezone.utc)
+        stamp = datetime.fromisoformat(
+            str(body["timestamp"]).replace(" ", "T")
+        ).replace(tzinfo=timezone.utc)
+        if stamp > retrieved:
+            raise ValueError("Future option snapshot")
+        data = body.get("data") or {}
+        spot = data.get("current_price")
+        quotes = [
+            {
+                "contract_id": row.get("option"),
+                "latestQuote": {
+                    "bp": row.get("bid"),
+                    "ap": row.get("ask"),
+                    "t": stamp.isoformat(),
+                },
+                "impliedVolatility": row.get("iv"),
+            }
+            for row in data.get("options") or []
+            if row.get("option")
+        ]
+        estimate = (
+            chain_estimate(symbol, float(spot), quotes, as_of, report_date)
+            if spot
+            else {"implied_move": None, "reason": "No underlying price"}
+        )
+        move = estimate.get("implied_move")
+        return {
+            "observed_at": stamp,
+            "retrieved_at": retrieved,
+            "payload": {
+                "implied_move": move,
+                "report_date": report_date if move is not None else None,
+                "expiry": estimate.get("expiry"),
+                "strike": estimate.get("strike"),
+                "spot": float(spot) if spot else None,
+                "iv30": data.get("iv30"),
+                "reason": None if move is not None else estimate.get("reason"),
+                "executable": False,
+                "quote_kind": "Cboe delayed indicative estimate",
+            },
+        }
