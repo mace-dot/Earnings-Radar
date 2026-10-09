@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Board } from "@/components/board";
 import type { Event, Line, Security } from "@/lib/types";
 
@@ -44,9 +43,6 @@ export function ResearchSwitch({
         >
           {earningsLabel}
         </button>
-        <Link className="button" href="/moves">
-          Quiet setups
-        </Link>
       </nav>
       <Board
         companies={current.companies}

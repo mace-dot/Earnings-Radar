@@ -12,11 +12,12 @@ import {
   type News,
   type Forum,
 } from "@/components/context";
-import { Board } from "@/components/board";
+import { CaseReview } from "@/components/case-review";
 import { Fundamentals, type FinancialContext } from "@/components/fundamentals";
 import { EarningsHistory } from "@/components/earnings-history";
 import { marketDate } from "@/lib/time";
 import type { SavedEarning } from "@/lib/earnings-history";
+import { crowdCopy, leanCopy, moveSizeCopy } from "@/lib/ticker-result";
 export default async function Stock({
   params,
 }: {
@@ -38,6 +39,8 @@ export default async function Stock({
     coverage,
     revisions,
     calendar,
+    features,
+    implied,
   ] = await Promise.all([
     read<Security>("securities", {
       symbol: `eq.${symbol}`,
@@ -112,6 +115,25 @@ export default async function Stock({
       order: "report_date.asc",
       limit: "1",
     }),
+    read<{
+      values: {
+        return_20?: number | null;
+        vol_compression_ratio?: number | null;
+        volume_multiple_20?: number | null;
+        range_multiple_20?: number | null;
+        implied_move?: number | null;
+      };
+    }>("features", {
+      symbol: `eq.${symbol}`,
+      order: "as_of.desc",
+      limit: "3",
+    }),
+    read<{ payload: { implied_move?: number | null } }>("market_observations", {
+      symbol: `eq.${symbol}`,
+      feed: "eq.cboe_delayed_implied",
+      order: "observed_at.desc",
+      limit: "1",
+    }),
   ]);
   if (!companies.length) notFound();
   const company = companies[0];
@@ -144,6 +166,44 @@ export default async function Stock({
       ...l,
       sides: sides.filter((s) => s.id.startsWith(`${l.id}:`)),
     }));
+  const swing = lines.find((line) => line.kind === "Swing");
+  const feature = features.find(
+    (row) =>
+      row.values.vol_compression_ratio != null || row.values.return_20 != null,
+  );
+  const savedMove =
+    feature?.values.implied_move ?? implied[0]?.payload.implied_move ?? null;
+  const favoredSide = swing?.sides.find(
+    (side) => side.side === swing.payload.favored,
+  );
+  const bullPosts = forums.filter(
+    (post) => post.payload.sentiment?.basic === "Bullish",
+  ).length;
+  const bearPosts = forums.filter(
+    (post) => post.payload.sentiment?.basic === "Bearish",
+  ).length;
+  const sizeLines = moveSizeCopy({
+    compression:
+      feature?.values.vol_compression_ratio ??
+      swing?.payload.metrics?.vol_compression_ratio ??
+      null,
+    volumeMultiple: feature?.values.volume_multiple_20 ?? null,
+    rangeMultiple: feature?.values.range_multiple_20 ?? null,
+    impliedMove: savedMove,
+  });
+  const directionLines = leanCopy({
+    favored: swing?.payload.favored ?? null,
+    return20: feature?.values.return_20 ?? null,
+    sampleSize:
+      favoredSide?.payload.sample_size ??
+      swing?.sides[0]?.payload.sample_size ??
+      null,
+  });
+  const crowdLines = crowdCopy({
+    bullPosts,
+    bearPosts,
+    forumCount: forums.length,
+  });
   return (
     <>
       <Link href="/">← Board</Link>
@@ -154,6 +214,34 @@ export default async function Stock({
       <p>
         {company.sector} · {company.exchange}
       </p>
+      <div className="grid">
+        <section className="panel">
+          <h2>How large a move could be</h2>
+          {sizeLines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </section>
+        <section className="panel">
+          <h2>Which way the evidence leans</h2>
+          {directionLines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </section>
+        <section className="panel">
+          <h2>What a sampled crowd says</h2>
+          {crowdLines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          {forums.slice(0, 3).map((post) => (
+            <article key={post.id} className="row">
+              <div>
+                <p>{post.payload.text.slice(0, 180)}</p>
+                <small>{formatAsOf(post.published_at)}</small>
+              </div>
+            </article>
+          ))}
+        </section>
+      </div>
       <Fundamentals context={financial[0]?.payload} sector={company.sector} />
       <EarningsHistory
         rows={revisions}
@@ -193,9 +281,8 @@ export default async function Stock({
         Date.now() - Date.parse(market[0].retrieved_at) > 1800000) && (
         <RequestScore symbol={symbol} />
       )}
-      <Context symbol={symbol} market={market} news={news} forums={forums} />
-      <h2>Explore a case</h2>
-      <Board companies={companies} lines={lines} events={events} />
+      <Context symbol={symbol} market={market} news={news} />
+      <CaseReview company={company} lines={lines} />
       <section className="panel">
         <h2>Company identity</h2>
         <p>

@@ -36,54 +36,20 @@ export function Context({
   symbol,
   market,
   news,
-  forums,
 }: {
   symbol: string;
   market: Market[];
   news: News[];
-  forums: Forum[];
 }) {
   const latest = market[0];
-  const option = latest?.payload.option_estimate;
-  const bull = forums.filter(
-    (p) => p.payload.sentiment?.basic === "Bullish",
-  ).length;
-  const bear = forums.filter(
-    (p) => p.payload.sentiment?.basic === "Bearish",
-  ).length;
   return (
     <>
-      <div className="two-column">
-        <LivePrice
-          symbol={symbol}
-          initialSource={latest?.source}
-          initialPrice={latest?.payload.latestTrade?.p}
-          initialTime={latest?.observed_at}
-        />
-        <section className="panel">
-          <h2>What paired options cost</h2>
-          {option ? (
-            <>
-              <p className="metric">
-                ±{(option.implied_move * 100).toFixed(1)}%
-              </p>
-              <p>Indicative ATM pair · expiry {option.expiry}</p>
-              <p>
-                {option.event_specific
-                  ? "Matched to a provider-estimated report date"
-                  : "General expiry range; not an earnings-move estimate"}
-              </p>
-              <small>
-                {option.source ?? "Stored option source"} · as of{" "}
-                {formatAsOf(option.as_of)}. This is a cost comparison, not a
-                predicted move.
-              </small>
-            </>
-          ) : (
-            <p>No paired option estimate available.</p>
-          )}
-        </section>
-      </div>
+      <LivePrice
+        symbol={symbol}
+        initialSource={latest?.source}
+        initialPrice={latest?.payload.latestTrade?.p}
+        initialTime={latest?.observed_at}
+      />
       <div className="two-column" style={{ marginTop: 24 }}>
         <section className="panel">
           <h2>News to investigate</h2>
@@ -115,28 +81,6 @@ export function Context({
           ) : (
             <p>No recent headlines collected.</p>
           )}
-        </section>
-        <section className="panel">
-          <h2>What a sampled crowd says</h2>
-          <p>
-            {bull} bullish tags · {bear} bearish tags · {forums.length} recent
-            sampled posts
-          </p>
-          <p className="muted">
-            Stocktwits opinions are not a representative market survey. Untagged
-            posts are not treated as neutral. Popularity alone is not an edge.
-          </p>
-          {forums.slice(0, 5).map((f) => (
-            <article key={f.id} className="row">
-              <div>
-                <p>{f.payload.text.slice(0, 300)}</p>
-                <small>
-                  {formatAsOf(f.published_at)} · collected{" "}
-                  {formatAsOf(f.retrieved_at)}
-                </small>
-              </div>
-            </article>
-          ))}
         </section>
       </div>
     </>
