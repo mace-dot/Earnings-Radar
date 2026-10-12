@@ -56,3 +56,14 @@ Alpha Vantage's free key allows 25 requests per day. One request refreshes the t
 Market Chameleon is the planned expectations desk: announced earnings events and end-of-day option prints with implied volatility, as a counterweight to retail discussion. As of 2026-10-08 its developer page says the website is display-only, scraping is prohibited, and there is no public Web API. Catalog feeds are paid, and an internal-use license is not permission to republish figures on the public site. No subscription is authorized. The desk stays `LICENSE_REQUIRED` until a specific feed and redistribution right are approved.
 
 The forward test `forward-price-magnitude-v2` keeps the five price features and adds days until the report, volume and range versus the prior 20 sessions, a saved Cboe implied move, one SPY return and realized-volatility reading, and the last saved earnings surprise plus a four-quarter beat rate. Each new value has a known flag so a blank stays blank. Finnhub and Alpha Vantage date disagreements leave the day count missing. Earnings history and implied moves are used only after their own save time, so older decision dates do not receive them. The five-session 5 percent target is unchanged, and probabilities stay unpublished.
+
+## 2026-10-12 — Scoped history indexing budget
+
+Measured daily index work takes ~15 seconds for 12,592 accumulated symbol
+histories. Set only radar_index_history's API statement timeout to 40 seconds;
+do not raise the database-wide timeout. Repair archived backlog one day per
+RPC so completed transactions survive a later error. Retry only idempotent
+history indexing for recognized transient SQLSTATEs, up to three attempts;
+preserve failure status on exhaustion. Never log database response bodies.
+This is a bounded operational repair, not a claim that coverage is complete;
+if per-day work approaches 40 seconds, partition the indexing work by symbol.

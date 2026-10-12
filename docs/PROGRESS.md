@@ -262,3 +262,31 @@ Not started, and not claimed: liquidity-sweep detection, calibrated large-move p
 ## Board speed and calendar — 2026-10-09
 
 The saved calendar has 1,431 reports, but the earliest date is 2026-11-09, so the old “this week” board was empty and company pages said the calendar was not connected. The board now switches between researched names and the next saved reports without reloading, and Finnhub is requested in one-week chunks so near-term dates are not dropped on the next collection.
+
+## 2026-10-12 — Repair recurring master-engine history timeout
+
+Audited Actions run 37999734412 at main 98010ab and current production run records.
+The failed job is history_sync, not checkout/setup or the Node 20 warning.
+Postgres logs confirm statement timeouts. A service-role EXPLAIN ANALYZE of
+radar_index_history for 2026-10-08 took 14.919s (rolled back), over the inherited
+8s API limit. That archived day had 12,592 observations and no index marker;
+synchronization repeatedly failed there before collecting newer days.
+
+Applied migration 20261012202541_history_index_timeout to production: a 40s
+allowance on this RPC only, below the 45s HTTP client timeout. Repaired the
+October 8 index successfully: 12,592 symbol histories. Python backlog recovery
+now uses one session per transaction. RPC failures retain only allowlisted
+SQLSTATE, RPC name, HTTP status and attempt count. Only the idempotent history
+index retries recognized transient SQL failures, at most three attempts.
+Authentication failures and queue claims are not replayed.
+
+Validation: 133 Python tests pass; black --check engine and ruff check engine
+pass. Added timeout recovery, capped retry, authentication/unknown-error
+nonretry, secret-redaction, queue nonreplay, and resumable per-day index tests.
+Local test environment required socksio for the workspace proxy; production
+requirements were not changed. Production history read verification follows
+below. No web code changed. Full scheduled provider catch-up is not yet
+verified; October 9 remains to be collected by the worker. Existing history
+sync failure backoff can defer that job for one hour after its last failure.
+Coverage snapshot: 7,187 covered and 3,275 failed identifiers; do not describe
+those failures as resolved or fabricate history for absent instruments.

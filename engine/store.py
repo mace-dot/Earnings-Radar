@@ -2,6 +2,8 @@
 
 import os
 import re
+import logging
+import time
 from typing import Any
 
 import httpx
@@ -37,6 +39,19 @@ TABLES = {
 
 class ConfigurationError(RuntimeError):
     """Actionable configuration failure whose message contains no secret values."""
+
+
+class DatabaseOperationError(RuntimeError):
+    """Safe database metadata only; never retain response bodies or credentials."""
+
+    def __init__(self, operation: str, status: int, code: str, attempts: int) -> None:
+        self.operation = operation
+        self.status = status
+        self.code = code
+        self.attempts = attempts
+        super().__init__(
+            f"Database {operation} HTTP {status}; code={code}; attempts={attempts}"
+        )
 
 
 def database_configuration() -> tuple[str, str]:
@@ -149,10 +164,39 @@ class Store:
             raise RuntimeError(
                 "History RPC exceeded capacity; do not silently truncate"
             )
-        response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)
-        if not response.is_success:
-            raise RuntimeError(f"Queue operation failed ({response.status_code})")
-        return response.json()
+        # Only the idempotent derived-history upsert is safe to replay. Never
+        # replay queue claims, whose response could have been lost after commit.
+        max_attempts = 3 if name == "radar_index_history" else 1
+        for attempt in range(1, max_attempts + 1):
+            response = self.client.post(f"{self.url}/rest/v1/rpc/{name}", json=payload)
+            if response.is_success:
+                return response.json()
+            try:
+                body = response.json()
+                code = body.get("code", "") if isinstance(body, dict) else ""
+            except ValueError:
+                code = ""
+            # Record only known SQLSTATEs, not arbitrary provider-supplied text.
+            known_codes = {
+                "57014",
+                "40P01",
+                "40001",
+                "08000",
+                "08003",
+                "08006",
+                "42501",
+            }
+            code = code if isinstance(code, str) and code in known_codes else "unknown"
+            error = DatabaseOperationError(name, response.status_code, code, attempt)
+            transient = code in {"57014", "40P01", "40001", "08000", "08003", "08006"}
+            if (
+                response.status_code in {401, 403}
+                or not transient
+                or attempt == max_attempts
+            ):
+                raise error
+            logging.getLogger(__name__).warning("%s; retrying", error)
+            time.sleep(attempt)
 
     def finish_market(
         self, symbol: str, lease_token: str, payload: dict[str, Any]

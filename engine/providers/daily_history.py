@@ -199,10 +199,10 @@ def synchronize(store: Any, now: datetime, limit: int = 3) -> dict[str, Any]:
         for row in store.read("market_history_indexed_sessions", {"select": "id"})
     }
     missing_index = sorted(existing - indexed)
-    for offset in range(0, len(missing_index), 100):
-        store.rpc(
-            "radar_index_history", {"p_sessions": missing_index[offset : offset + 100]}
-        )
+    # One market-wide day already updates ~12,500 symbol histories. Keep each
+    # transaction bounded and retain completed days when a later repair fails.
+    for session in missing_index:
+        store.rpc("radar_index_history", {"p_sessions": [session]})
     wanted = [
         s
         for s in reversed(recent_sessions(now))

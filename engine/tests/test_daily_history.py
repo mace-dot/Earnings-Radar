@@ -13,6 +13,48 @@ from engine.providers.daily_history import (
 NOW = datetime(2026, 10, 8, 16, tzinfo=timezone.utc)
 
 
+def test_backlog_indexes_one_day_per_transaction_and_resumes(monkeypatch):
+    from engine.providers.daily_history import synchronize
+
+    sessions = ["2026-10-05", "2026-10-06", "2026-10-07"]
+    monkeypatch.setenv("MASSIVE_API_KEY", "fixture-only")
+    monkeypatch.setattr(
+        "engine.providers.daily_history.recent_sessions", lambda _: sessions
+    )
+    monkeypatch.setattr(
+        "engine.providers.daily_history.split_reference", lambda *a: False
+    )
+
+    class Database:
+        indexed = set()
+        attempts = []
+        fail = True
+
+        def pages(self, *args):
+            return [{"session_date": day} for day in sessions]
+
+        def read(self, *args):
+            return [{"id": f"massive_daily_adjusted:{day}"} for day in self.indexed]
+
+        def rpc(self, name, payload):
+            assert name == "radar_index_history"
+            assert len(payload["p_sessions"]) == 1
+            day = payload["p_sessions"][0]
+            self.attempts.append(day)
+            if self.fail and day == sessions[1]:
+                raise RuntimeError("fixture database failure")
+            self.indexed.add(day)
+
+    db = Database()
+    with pytest.raises(RuntimeError, match="fixture database failure"):
+        synchronize(db, NOW)
+    assert db.indexed == {sessions[0]}
+    db.fail = False
+    assert synchronize(db, NOW)["remaining_sessions"] == 0
+    assert db.indexed == set(sessions)
+    assert db.attempts.count(sessions[0]) == 1
+
+
 def test_exchange_close_accounts_for_half_days():
     assert session_close("2026-11-27").hour == 18
     assert session_close("2026-10-07").hour == 20
