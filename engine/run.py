@@ -20,11 +20,13 @@ from engine.providers.public_market import Nasdaq
 from engine.providers.daily_history import history_provider
 from engine.providers.alpha_vantage import AlphaVantage, QuotaExceeded
 from engine.providers.sec import SEC
-from engine.store import Store
+from engine.store import DatabaseOperationError, Store
 
 
 def safe_diagnostic(exc: Exception) -> str:
     """Only allow known diagnostic forms; never expose arbitrary provider bodies."""
+    if isinstance(exc, DatabaseOperationError):
+        return str(exc)
     if str(exc) in {
         "MASSIVE_API_KEY missing; add a historical-data key securely",
         "MASSIVE_API_KEY missing; a historical-data account is required",
