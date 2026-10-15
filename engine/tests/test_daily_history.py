@@ -277,3 +277,21 @@ def test_absent_identifier_is_unavailable_only_after_complete_archive(monkeypatc
     provider = Massive(Database())
     assert provider.bars(["ABSENT_FIXTURE"], "2026-06-10", "2026-10-08") == []
     assert provider.errors["ABSENT_FIXTURE"].startswith("Symbol unavailable")
+
+
+def test_entitlement_diagnostic_never_echoes_provider_message():
+    from engine.run import safe_diagnostic
+
+    request = httpx.Request(
+        "GET", "https://api.massive.com/fixture?apiKey=secret-fixture"
+    )
+    response = httpx.Response(
+        403,
+        request=request,
+        json={"message": "Your subscription plan excludes this; secret-fixture"},
+    )
+    error = httpx.HTTPStatusError("private-fixture", request=request, response=response)
+    diagnostic = safe_diagnostic(error)
+    assert "subscription_entitlement" in diagnostic
+    assert "secret-fixture" not in diagnostic
+    assert "private-fixture" not in diagnostic

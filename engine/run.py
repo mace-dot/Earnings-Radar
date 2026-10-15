@@ -36,7 +36,31 @@ def safe_diagnostic(exc: Exception) -> str:
         isinstance(exc, httpx.HTTPStatusError)
         and exc.request.url.host == "api.massive.com"
     ):
-        return f"Massive API HTTP {exc.response.status_code}; verify key, account entitlement and rate limit"
+        category = {
+            401: "authentication",
+            403: "access_or_entitlement",
+            429: "rate_limit",
+        }.get(exc.response.status_code, "provider_failure")
+        try:
+            body = exc.response.json()
+            message = (
+                str(body.get("message", ""))[:2000].lower()
+                if isinstance(body, dict)
+                else ""
+            )
+        except ValueError:
+            message = ""
+        if exc.response.status_code == 403:
+            if any(
+                term in message
+                for term in ("too recent", "not yet", "available until", "data delay")
+            ):
+                category = "release_time_restriction"
+            elif any(
+                term in message for term in ("subscription", "entitlement", "plan")
+            ):
+                category = "subscription_entitlement"
+        return f"Massive API HTTP {exc.response.status_code}; category={category}; verify account access before changing credentials"
     match = re.fullmatch(r"(Database|Queue) operation failed \((\d{3})\)", str(exc))
     if match:
         return f"{match[1]} HTTP {match[2]}"
@@ -363,11 +387,35 @@ def calendar_symbols(store: Store, now: datetime) -> list[str]:
             "and": f"(report_date.gte.{(now-timedelta(days=20)).date()},report_date.lte.{(now+timedelta(days=60)).date()})",
         },
     )
-    queued = store.pages("score_queue", {"select": "symbol", "order": "symbol.asc"})
-    existing = store.pages(
-        "current_line_symbols", {"select": "symbol", "order": "symbol.asc"}
+    queued = store.pages(
+        "score_queue",
+        {
+            "select": "symbol",
+            "state": "in.(queued,running)",
+            "order": "symbol.asc",
+        },
     )
-    return sorted({row["symbol"] for row in events + queued + existing})
+    existing = store.read(
+        "lines",
+        {
+            "select": "symbol",
+            "expires_at": f"gte.{now.isoformat()}",
+            "order": "as_of.desc,id.asc",
+            "limit": "500",
+        },
+    )
+    # Full-market screening remains separate. Deep research is bounded, with
+    # explicit requests first and a daily rotation through calendar candidates.
+    event_symbols = sorted({row["symbol"] for row in events})
+    if event_symbols:
+        start = now.date().toordinal() * 200 % len(event_symbols)
+        event_symbols = event_symbols[start:] + event_symbols[:start]
+    ordered = (
+        [row["symbol"] for row in queued]
+        + [row["symbol"] for row in existing]
+        + event_symbols
+    )
+    return list(dict.fromkeys(ordered))[:300]
 
 
 def drain_queue(store: Store, limit: int = 10) -> dict[str, Any]:

@@ -51,7 +51,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || secrets.SUPABASE_SECRET_KEY }}
         run: python -m engine.run market_scan --batches 15
   research:
-    needs: scan
+    needs: [prepare, scan]
+    if: ${{ always() && !cancelled() && needs.prepare.result == 'success' }}
     environment: Production
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -71,6 +72,7 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY || secrets.FINN_HUB }}
           SEC_USER_AGENT: 'EarningsRadar mace@udel.edu'
         run: |
+          python -m engine.research_readiness
           python -m engine.run context
           python -m engine.run prices
           python -m engine.run score

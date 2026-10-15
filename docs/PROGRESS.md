@@ -290,3 +290,16 @@ verified; October 9 remains to be collected by the worker. Existing history
 sync failure backoff can defer that job for one hour after its last failure.
 Coverage snapshot: 7,187 covered and 3,275 failed identifiers; do not describe
 those failures as resolved or fabricate history for absent instruments.
+
+### Operational recovery and data budget course of action
+
+Audited current main and production records: Massive HTTP 403, zero frozen
+validation cases, 1,252 MB database storage. Added a 300-symbol deep-research
+budget with pending-request priority and daily calendar rotation; full-market
+screening remains separate. Bootstrap research can recover after a failed scan
+only through a recent-history readiness gate, retaining the original failure.
+Added whitelist-only provider access categories and validation source-lag
+explanations without weakening eligibility. No records are deleted. Detailed
+retention, provider selection, licensing and acceptance steps are documented in
+DATA_RELIABILITY_ACTION_PLAN.md. Provider purchases and executable live options
+remain outside this release.

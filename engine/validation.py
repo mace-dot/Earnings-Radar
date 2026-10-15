@@ -88,6 +88,8 @@ def capture(store: Any, now: datetime, limit: int = 500) -> dict[str, Any]:
         {"feed": "eq.massive_splits_120d", "order": "session_date.desc", "limit": "1"},
     )
     output = []
+    lagged_sources = 0
+    latest_source_session = None
     # Rotate the bounded research cohort rather than always selecting A-tickers.
     if features:
         start = now.date().toordinal() * limit % len(features)
@@ -107,7 +109,12 @@ def capture(store: Any, now: datetime, limit: int = 500) -> dict[str, Any]:
         listing_time = datetime.fromisoformat(listing_at)
         if max(as_of, observation_time, listing_time) > now:
             raise ValueError("Future feature or identity cannot enter validation")
-        if observation_time.astimezone(cal.tz).date().isoformat() != today:
+        source_session = observation_time.astimezone(cal.tz).date().isoformat()
+        latest_source_session = max(
+            latest_source_session or source_session, source_session
+        )
+        if source_session != today:
+            lagged_sources += 1
             continue
         if (
             f.get("feed") != "massive_daily_adjusted"
@@ -164,6 +171,14 @@ def capture(store: Any, now: datetime, limit: int = 500) -> dict[str, Any]:
         store.write("validation_cases", output[offset : offset + 100], immutable=True)
     return {
         "snapshots": len(output),
+        "latest_source_session": latest_source_session,
+        "lagged_source_rows": lagged_sources,
+        "collection_note": (
+            "History is from an earlier session; same-session validation remains blocked. "
+            "Verify provider release timing; never backdate source availability."
+            if not output and lagged_sources
+            else None
+        ),
         "version": VERSION,
         "probabilities_published": False,
     }
