@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
-test("search, both-sided case, price history and lineup", async ({ page }) => {
+test("search opens company research, both-sided case and price history", async ({
+  page,
+}) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: /Find the setup/ }),
@@ -8,9 +10,10 @@ test("search, both-sided case, price history and lineup", async ({ page }) => {
     .getByRole("textbox", { name: "Company name or ticker" })
     .fill("AAPL");
   await page.getByRole("button", { name: "Find company" }).click();
+  await expect(page).toHaveURL(/\/stock\/AAPL$/);
   await expect(
-    page.getByRole("link", { name: "AAPL", exact: true }),
-  ).toBeVisible();
+    page.getByText("The database could not be read", { exact: false }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "↑ BULL", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(
@@ -21,11 +24,9 @@ test("search, both-sided case, price history and lineup", async ({ page }) => {
       name: /^(Shares with stop|Long call research)$/,
     }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Add to research lineup" }).click();
-  await expect(
-    page.getByText("AAPL · Swing · BULL", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("link", { name: "AAPL", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Close research", exact: true })
+    .click();
   await expect(
     page.getByRole("img", { name: /Closing price history/ }),
   ).toBeVisible();
@@ -134,7 +135,9 @@ test("automatic research and weekly earnings have separate board views", async (
     .getByRole("button", { name: /Earnings this week|Next saved reports/ })
     .click();
   await expect(
-    page.getByText(/Earnings this week|Next saved reports/),
+    page
+      .locator("strong")
+      .filter({ hasText: /Earnings this week|Next saved reports/ }),
   ).toBeVisible();
   await navigation.getByRole("button", { name: "Automatic research" }).click();
   await expect(

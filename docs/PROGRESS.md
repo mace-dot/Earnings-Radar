@@ -303,3 +303,17 @@ explanations without weakening eligibility. No records are deleted. Detailed
 retention, provider selection, licensing and acceptance steps are documented in
 DATA_RELIABILITY_ACTION_PLAN.md. Provider purchases and executable live options
 remain outside this release.
+
+Release validation found an existing company-search defect: Next.js redirect()
+was inside the database catch block and was mistaken for a database outage.
+Moved single-result redirects outside that handler and avoided unnecessary
+research reads before redirecting. Browser coverage now verifies the current
+single-company flow (case, counterevidence and chart) and targets the earnings
+view label unambiguously. The production diagnostic succeeded and reported
+5,267 lagged source rows, latest session October 13; zero cases were fabricated.
+
+Company pages now fetch the exact selected research-side IDs rather than a
+truncated 80-row history window; this restored both MORE/LESS choices without
+inventing cases. Final local production build and all six connected browser
+flows pass, including search redirect, both-sided research, chart, quote relay,
+public picks and validation. Backend: 137 tests pass.

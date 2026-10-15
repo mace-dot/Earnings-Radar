@@ -58,7 +58,6 @@ export default async function Page({
           })
         : [];
       companies = found.filter((company) => matchesCompany(company, term));
-      if (companies.length === 1) redirect(`/stock/${companies[0].symbol}`);
     } else {
       const [calendar, published] = await Promise.all([
         read<Event>("earnings_events", {
@@ -102,7 +101,7 @@ export default async function Page({
       events = calendar;
     }
     const symbols = companies.map((company) => company.symbol).join(",");
-    if (symbols) {
+    if (symbols && !(term && companies.length === 1)) {
       const [rawLines, sides, calendar] = await Promise.all([
         read<Line>("lines", {
           symbol: `in.(${symbols})`,
@@ -150,6 +149,8 @@ export default async function Page({
   } catch {
     unavailable = true;
   }
+  if (term && !unavailable && companies.length === 1)
+    redirect(`/stock/${companies[0].symbol}`);
   const earningsSymbols = [
     ...new Set(
       events

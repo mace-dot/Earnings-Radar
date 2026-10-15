@@ -67,11 +67,7 @@ export default async function Stock({
       order: "as_of.desc",
       limit: "20",
     }),
-    read<Side>("line_sides", {
-      id: `like.${symbol}:*`,
-      order: "as_of.desc",
-      limit: "80",
-    }),
+    Promise.resolve([] as Side[]),
     read<Market>("market_observations", {
       symbol: `eq.${symbol}`,
       feed: "in.(iex,finnhub_free)",
@@ -149,23 +145,35 @@ export default async function Stock({
   );
   const bars = selectHistory(storedBars, coverageBars);
   const seen = new Set<string>();
-  const lines = rawLines
-    .filter((l) => {
-      if (seen.has(l.kind)) return false;
-      seen.add(l.kind);
-      return [
-        "Swing",
-        "Run-Up",
-        "Earnings Move",
-        "Direction",
-        "IV Ramp",
-        "Drift",
-      ].includes(l.kind);
-    })
-    .map((l) => ({
-      ...l,
-      sides: sides.filter((s) => s.id.startsWith(`${l.id}:`)),
-    }));
+  const selectedLines = rawLines.filter((l) => {
+    if (seen.has(l.kind)) return false;
+    seen.add(l.kind);
+    return [
+      "Swing",
+      "Run-Up",
+      "Earnings Move",
+      "Direction",
+      "IV Ramp",
+      "Drift",
+    ].includes(l.kind);
+  });
+  if (selectedLines.length) {
+    const ids = selectedLines.flatMap((line) =>
+      ["BULL", "BEAR", "MORE", "LESS"].map((side) =>
+        JSON.stringify(`${line.id}:${side}`),
+      ),
+    );
+    sides.push(
+      ...(await read<Side>("line_sides", {
+        id: `in.(${ids.join(",")})`,
+        limit: "24",
+      })),
+    );
+  }
+  const lines = selectedLines.map((line) => ({
+    ...line,
+    sides: sides.filter((side) => side.id.startsWith(`${line.id}:`)),
+  }));
   const swing = lines.find((line) => line.kind === "Swing");
   const feature = features.find(
     (row) =>
